@@ -77,7 +77,7 @@ app.include_router(webhook_router)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        app, 
+        "main:app",  # String import para Railway
         host="0.0.0.0", 
         port=settings.PORT,
         reload=settings.APP_ENV == "development"  # Auto-reload en desarrollo

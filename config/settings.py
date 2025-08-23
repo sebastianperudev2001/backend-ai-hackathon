@@ -4,7 +4,9 @@ Todas las variables de entorno y configuraciones se manejan aquí
 """
 import os
 from functools import lru_cache
+from dotenv import load_dotenv  
 
+load_dotenv()
 
 class Settings:
     """Configuración de la aplicación"""
@@ -23,8 +25,8 @@ class Settings:
     # Aplicación
     APP_NAME: str = "WhatsApp Fitness Bot"
     APP_VERSION: str = "1.0.0"
-    APP_ENV: str = os.getenv("APP_ENV", "development")
-    PORT: int = int(os.getenv("PORT", 8000))
+    APP_ENV: str = os.getenv("APP_ENV", "production")  # Default a producción para Railway
+    PORT: int = int(os.getenv("PORT", 8000))  # Railway setea PORT automáticamente
     
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
