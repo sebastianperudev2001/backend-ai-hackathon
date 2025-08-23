@@ -4,11 +4,12 @@ Todas las variables de entorno y configuraciones se manejan aquí
 """
 import os
 from functools import lru_cache
-from dotenv import load_dotenv  
+from dotenv import load_dotenv
 
 load_dotenv()
 
 class Settings:
+
     """Configuración de la aplicación"""
     
     # WhatsApp Business API
@@ -37,6 +38,15 @@ class Settings:
     # Feature flags (para el hackathon, fácil activar/desactivar features)
     ENABLE_IMAGE_PROCESSING: bool = os.getenv("ENABLE_IMAGE_PROCESSING", "false").lower() == "true"
     ENABLE_AI_RESPONSES: bool = os.getenv("ENABLE_AI_RESPONSES", "false").lower() == "true"
+    
+    # Claude API Configuration
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    CLAUDE_MODEL: str = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-latest")
+    
+    # LangGraph Configuration
+    ENABLE_MULTI_AGENT: bool = os.getenv("ENABLE_MULTI_AGENT", "true").lower() == "true"
+    AGENT_MAX_ITERATIONS: int = int(os.getenv("AGENT_MAX_ITERATIONS", "10"))
+    AGENT_TIMEOUT: float = float(os.getenv("AGENT_TIMEOUT", "30.0"))
 
 
 @lru_cache()

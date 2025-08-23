@@ -11,6 +11,8 @@ from domain.models import (
 )
 from repository.whatsapp_repository import get_whatsapp_repository
 from config.settings import get_settings
+from agents.coordinator import CoordinatorAgent
+from agents.image_agent import ImageAnalysisAgent
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,19 @@ class WhatsAppService:
     def __init__(self):
         self.whatsapp_repo = get_whatsapp_repository()
         self.settings = get_settings()
+        
+        # Inicializar sistema multi-agente si está habilitado
+        self.coordinator = None
+        self.image_agent = None
+        
+        if self.settings.ENABLE_MULTI_AGENT and self.settings.ANTHROPIC_API_KEY:
+            try:
+                self.coordinator = CoordinatorAgent()
+                self.image_agent = ImageAnalysisAgent()
+                logger.info("✅ Sistema multi-agente con Claude inicializado")
+            except Exception as e:
+                logger.error(f"❌ Error inicializando sistema multi-agente: {str(e)}")
+                logger.info("⚠️ Continuando con respuestas predefinidas")
         
     async def process_webhook_data(self, webhook_data: Dict[str, Any]) -> bool:
         """
@@ -141,7 +156,7 @@ class WhatsAppService:
     async def _generate_text_response(self, text: str) -> str:
         """
         Generar respuesta basada en el texto recibido
-        AQUÍ ES DONDE AGREGARÁS TU LÓGICA DE IA/FITNESS
+        Usa el sistema multi-agente con Claude si está disponible
         
         Args:
             text: Texto del usuario
@@ -149,6 +164,31 @@ class WhatsAppService:
         Returns:
             Texto de respuesta
         """
+        # Si el sistema multi-agente está disponible, úsalo
+        if self.coordinator:
+            try:
+                logger.info(f"🤖 Procesando con sistema multi-agente: {text[:100]}...")
+                
+                # Preparar contexto adicional si es necesario
+                context = {
+                    "platform": "WhatsApp",
+                    "timestamp": self._get_current_timestamp()
+                }
+                
+                # Procesar con el coordinador de agentes
+                response = await self.coordinator.process_message(
+                    user_input=text,
+                    context=context
+                )
+                
+                logger.info("✅ Respuesta generada por sistema multi-agente")
+                return response
+                
+            except Exception as e:
+                logger.error(f"❌ Error en sistema multi-agente: {str(e)}")
+                logger.info("⚠️ Usando respuestas predefinidas como fallback")
+        
+        # Fallback: respuestas predefinidas si no hay sistema multi-agente
         text_lower = text.lower()
         
         # Comandos básicos del bot
@@ -206,6 +246,11 @@ class WhatsAppService:
                 "Escribe 'ayuda' para ver qué puedo hacer por ti."
             )
     
+    def _get_current_timestamp(self) -> str:
+        """Obtener timestamp actual"""
+        from datetime import datetime
+        return datetime.now().isoformat()
+    
     async def _handle_image_message(self, sender: str, image_data: Dict) -> MessageResponse:
         """
         Procesar mensaje de imagen
@@ -219,20 +264,66 @@ class WhatsAppService:
         """
         logger.info(f"🖼️ Imagen recibida de {sender}")
         
-        response_text = (
-            "📸 ¡Imagen recibida!\n\n"
-            "🔍 Analizando tu comida...\n\n"
-            "🥗 Parece una comida saludable!\n"
-            "Estimación: ~450 calorías\n\n"
-            "💡 Consejo: Agrega más proteína para mejor recuperación muscular."
-        )
-        
-        if not self.settings.ENABLE_IMAGE_PROCESSING:
+        # Si el sistema multi-agente con visión está disponible
+        if self.coordinator and self.image_agent:
+            try:
+                # Descargar la imagen de WhatsApp
+                image_id = image_data.get("id")
+                caption = image_data.get("caption", "")
+                
+                if image_id:
+                    logger.info(f"📥 Descargando imagen {image_id} de WhatsApp...")
+                    
+                    # Descargar imagen usando el agente
+                    image_bytes = await self.image_agent.download_whatsapp_image(
+                        image_id,
+                        self.settings.WHATSAPP_TOKEN
+                    )
+                    
+                    # Procesar con el coordinador incluyendo la imagen
+                    logger.info("🔍 Analizando imagen con Claude Vision...")
+                    
+                    # Determinar contexto basado en el caption
+                    user_input = caption if caption else "Analiza esta imagen"
+                    
+                    response_text = await self.coordinator.process_message(
+                        user_input=user_input,
+                        image_data=image_bytes,
+                        context={
+                            "platform": "WhatsApp",
+                            "has_caption": bool(caption),
+                            "sender": sender
+                        }
+                    )
+                    
+                    logger.info("✅ Imagen analizada exitosamente con Claude Vision")
+                    
+                else:
+                    response_text = "❌ No pude obtener el ID de la imagen. Por favor, intenta enviarla nuevamente."
+                    
+            except Exception as e:
+                logger.error(f"❌ Error analizando imagen con Claude: {str(e)}")
+                response_text = (
+                    "📸 ¡Imagen recibida!\n\n"
+                    "⚠️ Hubo un error al analizar la imagen.\n"
+                    "Por favor, intenta nuevamente o describe qué necesitas analizar."
+                )
+        else:
+            # Fallback: respuesta predefinida si no hay sistema multi-agente
             response_text = (
                 "📸 ¡Imagen recibida!\n\n"
-                "⚠️ El análisis de imágenes estará disponible pronto.\n"
-                "Por ahora, puedes describirme tu comida y te daré información nutricional."
+                "🔍 Analizando tu comida...\n\n"
+                "🥗 Parece una comida saludable!\n"
+                "Estimación: ~450 calorías\n\n"
+                "💡 Consejo: Agrega más proteína para mejor recuperación muscular."
             )
+            
+            if not self.settings.ENABLE_IMAGE_PROCESSING:
+                response_text = (
+                    "📸 ¡Imagen recibida!\n\n"
+                    "⚠️ El análisis de imágenes con IA estará disponible pronto.\n"
+                    "Por ahora, puedes describirme tu comida y te daré información nutricional."
+                )
         
         result = await self.whatsapp_repo.send_text_message(sender, response_text)
         
