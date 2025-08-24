@@ -13,6 +13,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from .fitness_agent import FitnessAgent
 from .nutrition_agent_simple import NutritionAgent
 from config.settings import get_settings
+from domain.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -445,8 +446,17 @@ class CoordinatorAgent:
                 # Obtener agente de nutrición con memoria persistente
                 nutrition_agent = self._get_or_create_nutrition_agent(user_id)
                 
-                # Llamar al agente de nutrición
-                response = await nutrition_agent.process(user_query, context)
+                # Crear un objeto User mock para la interfaz del nutrition agent
+                user = User(
+                    id=user_id,
+                    phone_number=phone_number,
+                    name="Demo User",  # Placeholder
+                    created_at=None,
+                    updated_at=None
+                )
+                
+                # Llamar al agente de nutrición usando process_message
+                response = await nutrition_agent.process_message(user_query, user, context)
                 
                 # Asegurar que la respuesta es un string limpio
                 if not isinstance(response, str):

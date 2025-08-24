@@ -53,8 +53,10 @@ class NutritionAgent(BaseAgent):
             
             # Determinar si debemos usar herramientas o responder directamente
             if self._should_use_tools(message):
+                logger.info(f"🔧 Usando herramientas para: '{message[:50]}...'")
                 return await self._process_with_tools(message, user_id, context)
             else:
+                logger.info(f"💬 Respuesta conversacional para: '{message[:50]}...'")
                 return await self._process_general_query(message, user, context)
             
         except Exception as e:
@@ -247,6 +249,7 @@ class NutritionAgent(BaseAgent):
             True si debe usar herramientas, False si es consulta general
         """
         message_lower = message.lower()
+        logger.info(f"🔍 Analizando mensaje para herramientas: '{message[:50]}...'") 
         
         # Palabras clave que indican uso de herramientas de consulta
         tool_keywords = [
@@ -281,6 +284,7 @@ class NutritionAgent(BaseAgent):
         # Verificar palabras de herramientas
         for keyword in tool_keywords:
             if keyword in message_lower:
+                logger.info(f"✅ Detectado keyword para herramientas: '{keyword}'")
                 return True
         
         # Frases de acción específica
@@ -291,14 +295,17 @@ class NutritionAgent(BaseAgent):
             if phrase in message_lower:
                 for target in specific_targets:
                     if target in message_lower:
+                        logger.info(f"✅ Detectado frase de acción: '{phrase}' + '{target}'")
                         return True
         
         # Por defecto, no usar herramientas para consultas ambiguas
+        logger.info(f"❌ No se detectó intent para herramientas - respuesta conversacional")
         return False
     
     async def _process_with_tools(self, message: str, user_id: str, context: Dict[str, Any]) -> str:
         """Procesar mensaje usando herramientas específicas"""
         message_lower = message.lower()
+        logger.info(f"🔧 Iniciando procesamiento con herramientas para user_id: {user_id}")
         
         # Detectar tipo de consulta y usar la herramienta apropiada
         if any(phrase in message_lower for phrase in [
@@ -317,6 +324,7 @@ class NutritionAgent(BaseAgent):
             'plan de dieta', 'plan activo', 'dieta activa', 'mi plan', 'plan que tengo',
             'dieta que tengo', 'mi dieta', 'plan actual', 'dieta actual'
         ]):
+            logger.info(f"📋 Consultando plan de dieta para user_id: {user_id}")
             result = await self.nutrition_tools.get_today_meals(user_id)
             return self._format_diet_plan(result)
         
