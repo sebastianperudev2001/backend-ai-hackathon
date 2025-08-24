@@ -47,6 +47,11 @@ class Settings:
     ENABLE_MULTI_AGENT: bool = os.getenv("ENABLE_MULTI_AGENT", "true").lower() == "true"
     AGENT_MAX_ITERATIONS: int = int(os.getenv("AGENT_MAX_ITERATIONS", "10"))
     AGENT_TIMEOUT: float = float(os.getenv("AGENT_TIMEOUT", "30.0"))
+    
+    # Supabase Configuration
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 
 
 @lru_cache()

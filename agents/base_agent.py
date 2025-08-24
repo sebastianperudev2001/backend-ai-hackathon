@@ -30,12 +30,17 @@ class BaseAgent:
         self.system_prompt = system_prompt
         
         # Inicializar modelo de Claude
-        self.llm = ChatAnthropic(
-            api_key=self.settings.ANTHROPIC_API_KEY,
-            model=self.settings.CLAUDE_MODEL,
-            temperature=0,
-            max_tokens=1024,
-        )
+        try:
+            self.llm = ChatAnthropic(
+                api_key=self.settings.ANTHROPIC_API_KEY,
+                model=self.settings.CLAUDE_MODEL,
+                temperature=0,
+                max_tokens=1024,
+            )
+        except Exception as e:
+            logger.error(f"❌ Error inicializando ChatAnthropic: {str(e)}")
+            # Crear un LLM mock para pruebas
+            self.llm = None
         
         # Memoria del agente
         self.memory = ConversationBufferMemory(
@@ -57,6 +62,9 @@ class BaseAgent:
             Respuesta generada por el agente
         """
         try:
+            if self.llm is None:
+                return f"🤖 {self.name} (Modo Demo): Recibí tu mensaje '{input_text}'. El modelo de IA no está disponible, pero las herramientas de fitness están listas para usar."
+            
             messages = [
                 SystemMessage(content=self.system_prompt),
                 HumanMessage(content=input_text)
