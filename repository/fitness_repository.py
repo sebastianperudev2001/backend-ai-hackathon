@@ -26,6 +26,17 @@ class FitnessRepository:
     def __init__(self):
         self.supabase_client = get_supabase_client()
     
+    def _sanitize_user_data(self, user_data: dict) -> dict:
+        """
+        Sanitiza los datos del usuario para manejar campos None que deben ser listas
+        """
+        sanitized_data = user_data.copy()
+        if sanitized_data.get('medical_conditions') is None:
+            sanitized_data['medical_conditions'] = []
+        if sanitized_data.get('goals') is None:
+            sanitized_data['goals'] = []
+        return sanitized_data
+    
     # ==================== MÉTODOS DE USUARIOS ====================
     
     async def get_user_by_phone(self, phone_number: str) -> Optional[User]:
@@ -40,7 +51,9 @@ class FitnessRepository:
             print('result', result)
             
             if result.data:
-                return User(**result.data)
+                # Sanitizar datos del usuario para manejar campos None
+                user_data = self._sanitize_user_data(result.data)
+                return User(**user_data)
             return None
             
         except Exception as e:
@@ -86,7 +99,9 @@ class FitnessRepository:
             result = self.supabase_client.client.table("users").insert(user_data).execute()
             
             if result.data:
-                user = User(**result.data[0])
+                # Sanitizar datos del usuario para manejar campos None
+                user_data = self._sanitize_user_data(result.data[0])
+                user = User(**user_data)
                 logger.info(f"✅ Usuario creado: {user.id} - {user.phone_number}")
                 return UserResponse(
                     success=True,
