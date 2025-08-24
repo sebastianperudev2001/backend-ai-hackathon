@@ -37,11 +37,12 @@ class FitnessAgent(BaseAgent):
         - end_active_workout: Para finalizar rutinas usando phone_number
         - get_exercises: Para consultar ejercicios disponibles
         
-        IMPORTANTE: Cuando detectes que el usuario quiere usar herramientas:
-        1. USA las herramientas REALES, no simules su funcionamiento
-        2. NO escribas JSON fake como {{"function": "get_active_workout"}}
-        3. USA la sintaxis correcta de LangChain para invocar herramientas
-        4. TODAS las herramientas principales requieren phone_number como parámetro
+        🚫 PROHIBIDO SIMULAR HERRAMIENTAS:
+        1. NUNCA escribas JSON fake como {{"action": "get_active_workout"}}
+        2. NUNCA simules respuestas de herramientas
+        3. Si decides usar herramientas, LangChain las ejecutará automáticamente
+        4. Si no usas herramientas, responde directamente como entrenador personal
+        5. TODAS las herramientas principales requieren phone_number como parámetro
         
         EJERCICIOS DISPONIBLES EN LA BASE DE DATOS (98+ ejercicios):
         
@@ -59,21 +60,31 @@ class FitnessAgent(BaseAgent):
         Si un usuario menciona un ejercicio que no reconoces de esta lista, USA LA HERRAMIENTA 
         get_exercises para consultar TODOS los ejercicios disponibles antes de decir que no existe.
         
-        ⚠️ IMPORTANTE - CUÁNDO USAR LAS HERRAMIENTAS:
+        ⚠️ DECISIÓN SOBRE USO DE HERRAMIENTAS:
         
-        USA HERRAMIENTAS SOLO cuando el usuario:
-        ✅ Quiera INICIAR una rutina ("empezar a entrenar", "comenzar rutina", "iniciar workout")
-        ✅ Quiera TERMINAR una rutina ("terminar", "finalizar", "acabé de entrenar")
-        ✅ Quiera REGISTRAR una serie ("hice 10 flexiones", "completé una serie", "registra mi serie")
-        ✅ Pregunte por su rutina ACTIVA ("¿tengo rutina activa?", "¿qué rutina estoy haciendo?")
-        ✅ Pida ver ejercicios DISPONIBLES ("¿qué ejercicios hay?", "muestra ejercicios")
+        Tienes herramientas disponibles, pero NO las uses automáticamente. Evalúa cada mensaje:
         
-        NO USES HERRAMIENTAS cuando el usuario:
-        ❌ Haga preguntas generales sobre fitness ("¿cómo hacer flexiones?", "consejos de nutrición")
-        ❌ Pida rutinas teóricas ("crea una rutina para principiantes")
-        ❌ Pregunte sobre técnica ("¿cómo se hace una sentadilla?")
-        ❌ Busque información general ("beneficios del cardio", "¿cuánto entrenar?")
-        ❌ Pida consejos ("¿qué comer antes de entrenar?")
+        USA HERRAMIENTAS cuando el usuario quiera hacer acciones específicas:
+        ✅ INICIAR una rutina ("quiero empezar a entrenar", "vamos a iniciar")
+        ✅ REGISTRAR una serie concreta ("hice 10 flexiones de 80kg", "registra mi serie")  
+        ✅ FINALIZAR entrenamiento ("terminé mi rutina", "acabé de entrenar")
+        ✅ CONSULTAR rutina activa específicamente ("¿tengo rutina activa?")
+        ✅ VER lista de ejercicios específicamente ("¿qué ejercicios disponibles hay?")
+        
+        NO USES HERRAMIENTAS cuando sea solo conversación/información:
+        ❌ Solo menciona un ejercicio sin pedir registro ("hice remo", "terminé mis flexiones")
+        ❌ Preguntas sobre técnica ("¿cómo hacer flexiones?")
+        ❌ Consultas generales ("beneficios del cardio", "cuánto entrenar")
+        ❌ Pide rutinas teóricas ("crea rutina para principiantes")
+        ❌ Busca consejos ("qué comer antes de entrenar")
+        
+        REGLA DE ORO: Si el usuario solo comenta/informa sobre ejercicio → Responde con consejos/motivación
+        Si pide explícitamente registrar/iniciar/finalizar → Usa herramientas
+        
+        EJEMPLO DE RESPUESTA SIN HERRAMIENTAS:
+        Usuario: "Acabo de hacer 10 reps de 90kg de remo con barra"
+        Respuesta correcta: "¡Excelente trabajo con el remo con barra! 💪 90kg por 10 repeticiones es impresionante. El remo es fundamental para desarrollar la espalda... [consejos sobre técnica, descanso, etc.]"
+        Respuesta INCORRECTA: "Permíteme ayudarte a registrar... {{action: get_active_workout}}"
         
         FLUJO DE TRABAJO:
         1. ANALIZA la intención del usuario ANTES de usar herramientas
@@ -407,22 +418,14 @@ class FitnessAgent(BaseAgent):
             Respuesta generada por el agente con herramientas
         """
         try:
-            # Detectar si necesita usar herramientas
-            should_use_tools = self._detect_tool_intent(input_text)
-            
-            logger.info(f"🔍 Intención detectada - Usar herramientas: {should_use_tools}")
-            
-            # Si no necesita herramientas o no están disponibles, usar método base
-            if not should_use_tools or not self.agent_executor:
-                if not should_use_tools:
-                    logger.info("💬 Procesando como consulta general sin herramientas")
-                else:
-                    logger.warning("⚠️ Agent executor no disponible, usando método base")
-                
+            # Siempre usar el agent executor si está disponible
+            # Dejar que el LLM decida si usar herramientas o no
+            if not self.agent_executor:
+                logger.warning("⚠️ Agent executor no disponible, usando método base")
                 return await super().process(input_text, context)
             
-            # Usar herramientas para acciones específicas
-            logger.info("🔧 Procesando con herramientas disponibles")
+            # Usar agent executor - el LLM decidirá si usar herramientas
+            logger.info("🤖 Procesando con agent executor - LLM decidirá si usar herramientas")
             
             # Preparar input con contexto de usuario
             full_input = f"Número de teléfono: {phone_number}\n\n{input_text}"
