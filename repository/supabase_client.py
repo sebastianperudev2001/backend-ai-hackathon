@@ -94,3 +94,11 @@ def get_supabase_client() -> SupabaseClient:
     Obtener instancia del cliente de Supabase
     """
     return SupabaseClient()
+
+
+def get_supabase_direct_client() -> Optional[Client]:
+    """
+    Obtener cliente directo de Supabase para operaciones simples
+    """
+    wrapper = get_supabase_client()
+    return wrapper.client

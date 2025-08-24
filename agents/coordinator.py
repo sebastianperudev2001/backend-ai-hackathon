@@ -46,21 +46,12 @@ class CoordinatorAgent:
             logger.error(f"❌ Error inicializando modelo Claude: {str(e)}")
             raise RuntimeError(f"No se pudo inicializar el modelo Claude: {str(e)}")
         
-        # Inicializar agentes especializados
+        # Los agentes se inicializarán dinámicamente con el user_id
         self.agents = {}
-        try:
-            # Solo necesitamos fitness y nutrition según el requerimiento
-            self.fitness_agent = FitnessAgent()
-            logger.info("✅ Agente de Fitness inicializado")
-            
-            self.nutrition_agent = NutritionAgent()
-            logger.info("✅ Agente de Nutrición inicializado")
-            
-        except Exception as e:
-            logger.error(f"❌ Error inicializando agentes: {str(e)}")
-            import traceback
-            logger.error(f"📋 Traceback: {traceback.format_exc()}")
-            raise
+        self.fitness_agent = None
+        self.nutrition_agent = None
+        
+        logger.info("✅ Coordinador inicializado - agentes se crearán dinámicamente")
         
         # Construir el grafo de flujo
         try:
@@ -71,6 +62,83 @@ class CoordinatorAgent:
             raise RuntimeError(f"No se pudo construir el grafo: {str(e)}")
         
         logger.info("✅ Coordinador multi-agente inicializado con LangGraph")
+    
+    def _get_user_id_from_phone(self, phone_number: str) -> Optional[str]:
+        """
+        Obtener user_id desde el número de teléfono
+        
+        Args:
+            phone_number: Número de teléfono del usuario
+            
+        Returns:
+            User ID si se encuentra, None si no
+        """
+        try:
+            from repository.supabase_client import get_supabase_direct_client
+            client = get_supabase_direct_client()
+            
+            if not client:
+                logger.warning("⚠️ Cliente de Supabase no inicializado")
+                return None
+            
+            result = client.table("users").select("id").eq("phone_number", phone_number).single().execute()
+            
+            if result.data:
+                logger.info(f"✅ Usuario encontrado para teléfono: {phone_number}")
+                return result.data["id"]
+            else:
+                logger.warning(f"⚠️ Usuario no encontrado para teléfono: {phone_number}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo user_id: {str(e)}")
+            import traceback
+            logger.error(f"📋 Traceback: {traceback.format_exc()}")
+            return None
+    
+    def _get_or_create_fitness_agent(self, user_id: Optional[str] = None) -> 'FitnessAgent':
+        """
+        Obtener o crear agente de fitness con memoria persistente
+        
+        Args:
+            user_id: ID del usuario para memoria persistente
+            
+        Returns:
+            Instancia del agente de fitness
+        """
+        try:
+            if not self.fitness_agent or (user_id and getattr(self.fitness_agent, 'user_id', None) != user_id):
+                self.fitness_agent = FitnessAgent(user_id=user_id)
+                logger.info(f"✅ Agente de Fitness creado con user_id: {user_id}")
+            return self.fitness_agent
+        except Exception as e:
+            logger.error(f"❌ Error creando agente de fitness: {str(e)}")
+            # Fallback sin memoria persistente
+            if not self.fitness_agent:
+                self.fitness_agent = FitnessAgent()
+            return self.fitness_agent
+    
+    def _get_or_create_nutrition_agent(self, user_id: Optional[str] = None) -> 'NutritionAgent':
+        """
+        Obtener o crear agente de nutrición con memoria persistente
+        
+        Args:
+            user_id: ID del usuario para memoria persistente
+            
+        Returns:
+            Instancia del agente de nutrición
+        """
+        try:
+            if not self.nutrition_agent or (user_id and getattr(self.nutrition_agent, 'user_id', None) != user_id):
+                self.nutrition_agent = NutritionAgent(user_id=user_id)
+                logger.info(f"✅ Agente de Nutrición creado con user_id: {user_id}")
+            return self.nutrition_agent
+        except Exception as e:
+            logger.error(f"❌ Error creando agente de nutrición: {str(e)}")
+            # Fallback sin memoria persistente
+            if not self.nutrition_agent:
+                self.nutrition_agent = NutritionAgent()
+            return self.nutrition_agent
     
     def _extract_text_from_response(self, response) -> str:
         """
@@ -252,8 +320,14 @@ class CoordinatorAgent:
                 if context and 'sender' in context:
                     phone_number = context['sender']
                 
+                # Obtener user_id para memoria persistente
+                user_id = self._get_user_id_from_phone(phone_number)
+                
+                # Obtener agente de fitness con memoria persistente
+                fitness_agent = self._get_or_create_fitness_agent(user_id)
+                
                 # Llamar al agente de fitness con herramientas
-                response = await self.fitness_agent.process_with_tools(
+                response = await fitness_agent.process_with_tools(
                     input_text=user_query,
                     phone_number=phone_number,
                     context=context
@@ -301,8 +375,20 @@ class CoordinatorAgent:
                 
                 logger.info(f"🥗 Procesando consulta con agente de nutrición: '{user_query[:50]}...'")
                 
+                # Extraer phone_number del contexto si está disponible
+                phone_number = "+51998555878"  # Default demo user
+                context = state.get('context', None)
+                if context and 'sender' in context:
+                    phone_number = context['sender']
+                
+                # Obtener user_id para memoria persistente
+                user_id = self._get_user_id_from_phone(phone_number)
+                
+                # Obtener agente de nutrición con memoria persistente
+                nutrition_agent = self._get_or_create_nutrition_agent(user_id)
+                
                 # Llamar al agente de nutrición
-                response = await self.nutrition_agent.process(user_query)
+                response = await nutrition_agent.process(user_query, context)
                 
                 # Asegurar que la respuesta es un string limpio
                 if not isinstance(response, str):

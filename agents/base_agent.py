@@ -6,8 +6,9 @@ from typing import Dict, Any, Optional, List
 from langchain_anthropic import ChatAnthropic
 from langchain.agents import AgentExecutor
 from langchain.memory import ConversationBufferMemory
-from langchain.schema import BaseMessage, HumanMessage, SystemMessage
+from langchain.schema import BaseMessage, HumanMessage, SystemMessage, AIMessage
 from config.settings import get_settings
+from agents.persistent_memory import PersistentChatMemory
 
 logger = logging.getLogger(__name__)
 
@@ -17,17 +18,19 @@ class BaseAgent:
     Clase base para todos los agentes del sistema
     """
     
-    def __init__(self, name: str, system_prompt: str):
+    def __init__(self, name: str, system_prompt: str, user_id: Optional[str] = None):
         """
         Inicializar agente base
         
         Args:
             name: Nombre del agente
             system_prompt: Prompt del sistema para este agente
+            user_id: ID del usuario para memoria persistente (opcional)
         """
         self.name = name
         self.settings = get_settings()
         self.system_prompt = system_prompt
+        self.user_id = user_id
         
         # Inicializar modelo de Claude
         try:
@@ -42,11 +45,30 @@ class BaseAgent:
             # Crear un LLM mock para pruebas
             self.llm = None
         
-        # Memoria del agente
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
+        # Memoria del agente - usar memoria persistente si se proporciona user_id
+        if user_id:
+            try:
+                self.memory = PersistentChatMemory(
+                    user_id=user_id,
+                    memory_key="chat_history",
+                    return_messages=True
+                )
+                logger.info(f"✅ Memoria persistente inicializada para usuario: {user_id}")
+            except Exception as e:
+                logger.error(f"❌ Error inicializando memoria persistente: {str(e)}")
+                # Fallback a memoria en memoria
+                self.memory = ConversationBufferMemory(
+                    memory_key="chat_history",
+                    return_messages=True
+                )
+                logger.info("⚠️ Usando memoria en memoria como fallback")
+        else:
+            # Memoria en memoria por defecto
+            self.memory = ConversationBufferMemory(
+                memory_key="chat_history",
+                return_messages=True
+            )
+            logger.info("📝 Usando memoria en memoria (sin persistencia)")
         
         logger.info(f"✅ Agente {name} inicializado con modelo {self.settings.CLAUDE_MODEL}")
     
@@ -119,4 +141,41 @@ class BaseAgent:
         Returns:
             Lista de mensajes en la memoria
         """
-        return self.memory.chat_memory.messages
+        if hasattr(self.memory, 'chat_memory'):
+            return self.memory.chat_memory.messages
+        else:
+            # Para memoria persistente, cargar desde BD
+            memory_vars = self.memory.load_memory_variables({})
+            return memory_vars.get("chat_history", [])
+    
+    async def get_conversation_summary(self) -> str:
+        """
+        Obtener resumen de la conversación actual
+        
+        Returns:
+            Resumen de la conversación
+        """
+        if isinstance(self.memory, PersistentChatMemory):
+            return await self.memory.get_conversation_summary()
+        else:
+            # Para memoria en memoria, crear resumen básico
+            messages = self.get_conversation_history()
+            human_count = len([m for m in messages if isinstance(m, HumanMessage)])
+            ai_count = len([m for m in messages if isinstance(m, AIMessage)])
+            return f"Conversación en memoria: {len(messages)} mensajes ({human_count} del usuario, {ai_count} del asistente)"
+    
+    async def add_system_message(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Agregar un mensaje del sistema a la conversación
+        
+        Args:
+            content: Contenido del mensaje del sistema
+            metadata: Metadatos adicionales
+        """
+        if isinstance(self.memory, PersistentChatMemory):
+            await self.memory.add_system_message(content, metadata)
+        else:
+            # Para memoria en memoria, agregar directamente
+            system_message = SystemMessage(content=content)
+            if hasattr(self.memory, 'chat_memory'):
+                self.memory.chat_memory.add_message(system_message)

@@ -13,7 +13,7 @@ class NutritionAgent(BaseAgent):
     Agente experto en nutrición, dietas y alimentación saludable
     """
     
-    def __init__(self):
+    def __init__(self, user_id: Optional[str] = None):
         system_prompt = """
         Eres un nutricionista certificado experto en alimentación saludable y nutrición deportiva.
         Tu objetivo es proporcionar:
@@ -38,7 +38,7 @@ class NutritionAgent(BaseAgent):
         Responde siempre en español y de forma clara y estructurada.
         """
         
-        super().__init__(name="NutritionAgent", system_prompt=system_prompt)
+        super().__init__(name="NutritionAgent", system_prompt=system_prompt, user_id=user_id)
         
         # Base de conocimiento nutricional
         self.nutrition_database = {

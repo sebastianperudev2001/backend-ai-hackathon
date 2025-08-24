@@ -279,3 +279,73 @@ class WorkoutSummaryResponse(BaseModel):
     exercises_performed: List[str]
     duration_minutes: Optional[int]
     average_difficulty: Optional[float]
+
+
+# ==================== MODELOS DE MEMORIA/CONVERSACIÓN ====================
+
+class ConversationMessageType(str, Enum):
+    """Tipos de mensajes en la conversación"""
+    HUMAN = "human"
+    AI = "ai"
+    SYSTEM = "system"
+    FUNCTION = "function"
+
+
+class ConversationSession(BaseModel):
+    """Modelo para sesiones de conversación"""
+    id: Optional[str] = None
+    user_id: str
+    session_name: Optional[str] = None
+    started_at: datetime
+    last_activity_at: datetime
+    is_active: bool = True
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ConversationMessage(BaseModel):
+    """Modelo para mensajes de conversación"""
+    id: Optional[str] = None
+    session_id: str
+    message_type: ConversationMessageType
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
+    agent_name: Optional[str] = None
+    token_count: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+
+class CreateSessionRequest(BaseModel):
+    """Request para crear una sesión de conversación"""
+    user_id: str
+    session_name: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class AddMessageRequest(BaseModel):
+    """Request para agregar un mensaje a la conversación"""
+    session_id: str
+    message_type: ConversationMessageType
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
+    agent_name: Optional[str] = None
+    token_count: Optional[int] = None
+
+
+class ConversationHistoryResponse(BaseModel):
+    """Respuesta con historial de conversación"""
+    success: bool
+    session: Optional[ConversationSession] = None
+    messages: List[ConversationMessage] = []
+    total_messages: int = 0
+    message: str
+    error: Optional[str] = None
+
+
+class SessionResponse(BaseModel):
+    """Respuesta con información de sesión"""
+    success: bool
+    session: Optional[ConversationSession] = None
+    message: str
+    error: Optional[str] = None

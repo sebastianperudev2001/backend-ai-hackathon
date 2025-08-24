@@ -16,7 +16,7 @@ class FitnessAgent(BaseAgent):
     Agente experto en rutinas de ejercicio, técnicas de entrenamiento y fitness
     """
     
-    def __init__(self):
+    def __init__(self, user_id: Optional[str] = None):
         system_prompt = """
         Eres un entrenador personal experto en fitness y ejercicio físico con acceso a herramientas 
         para registrar y hacer seguimiento de rutinas de ejercicio.
@@ -98,7 +98,7 @@ class FitnessAgent(BaseAgent):
         Responde siempre en español y de forma clara y estructurada.
         """
         
-        super().__init__(name="FitnessAgent", system_prompt=system_prompt)
+        super().__init__(name="FitnessAgent", system_prompt=system_prompt, user_id=user_id)
         
         # Inicializar herramientas y agente executor
         self.tools = get_fitness_tools()
