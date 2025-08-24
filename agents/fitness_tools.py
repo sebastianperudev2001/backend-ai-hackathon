@@ -267,7 +267,9 @@ class AddSetTool(BaseTool):
             if response.success:
                 return f"✅ {response.message}"
             else:
-                return "❌ Lo siento, no pude registrar tu serie en este momento. Por favor, verifica que tengas una rutina activa e intenta nuevamente."
+                # Mostrar el mensaje específico del error
+                error_message = response.message if response.message else "No pude registrar tu serie en este momento."
+                return f"❌ {error_message}"
                 
         except Exception as e:
             logger.error(f"❌ Error en AddSetTool: {str(e)}")

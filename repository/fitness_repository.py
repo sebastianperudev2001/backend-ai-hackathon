@@ -314,9 +314,21 @@ class FitnessRepository:
             # Buscar el ejercicio por nombre
             exercise = await self.get_exercise_by_name(request.exercise_name)
             if not exercise:
+                # Obtener lista de ejercicios disponibles para sugerir
+                available_exercises = self.supabase_client.client.table("exercises").select("name").limit(5).execute()
+                suggestions = []
+                if available_exercises.data:
+                    suggestions = [ex['name'] for ex in available_exercises.data]
+                
+                suggestion_text = ""
+                if suggestions:
+                    suggestion_text = f"\n\n💡 Ejercicios disponibles: {', '.join(suggestions[:3])}"
+                    if len(suggestions) > 3:
+                        suggestion_text += "..."
+                
                 return SetResponse(
                     success=False,
-                    message=f"Ejercicio '{request.exercise_name}' no encontrado",
+                    message=f"No encontré el ejercicio '{request.exercise_name}' en la base de datos.{suggestion_text}",
                     error="Ejercicio no existe en la base de datos"
                 )
             
@@ -377,17 +389,85 @@ class FitnessRepository:
         """
         try:
             if not self.supabase_client.is_connected():
+                logger.error("❌ Supabase no está conectado para búsqueda de ejercicio")
                 return None
             
+            logger.info(f"🔍 Buscando ejercicio: '{name}'")
+            
+            # Intentar búsqueda exacta primero
+            result = self.supabase_client.client.table("exercises").select("*").ilike("name", f"{name}").limit(1).execute()
+            
+            if result.data:
+                logger.info(f"✅ Ejercicio encontrado (búsqueda exacta): {result.data[0]['name']}")
+                return Exercise(**result.data[0])
+            
+            # Si no se encuentra, intentar búsqueda parcial
+            logger.info(f"🔍 Búsqueda exacta falló, intentando búsqueda parcial para: '{name}'")
             result = self.supabase_client.client.table("exercises").select("*").ilike("name", f"%{name}%").limit(1).execute()
             
             if result.data:
+                logger.info(f"✅ Ejercicio encontrado (búsqueda parcial): {result.data[0]['name']}")
                 return Exercise(**result.data[0])
+            
+            # Si aún no se encuentra, intentar variaciones comunes
+            logger.info(f"🔍 Búsqueda parcial falló, intentando variaciones para: '{name}'")
+            variations = self._get_exercise_name_variations(name)
+            
+            for variation in variations:
+                logger.info(f"🔍 Probando variación: '{variation}'")
+                result = self.supabase_client.client.table("exercises").select("*").ilike("name", f"%{variation}%").limit(1).execute()
+                
+                if result.data:
+                    logger.info(f"✅ Ejercicio encontrado (variación '{variation}'): {result.data[0]['name']}")
+                    return Exercise(**result.data[0])
+            
+            # Listar algunos ejercicios disponibles para debugging
+            logger.warning(f"❌ Ejercicio '{name}' no encontrado. Listando ejercicios disponibles...")
+            all_exercises = self.supabase_client.client.table("exercises").select("name").limit(10).execute()
+            if all_exercises.data:
+                exercise_names = [ex['name'] for ex in all_exercises.data]
+                logger.info(f"📋 Ejercicios disponibles (primeros 10): {exercise_names}")
+            
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error buscando ejercicio: {str(e)}")
+            logger.error(f"❌ Error buscando ejercicio '{name}': {str(e)}")
             return None
+    
+    def _get_exercise_name_variations(self, name: str) -> List[str]:
+        """
+        Generar variaciones comunes de nombres de ejercicios
+        """
+        variations = []
+        name_lower = name.lower()
+        
+        # Variaciones comunes para ejercicios de bíceps
+        if 'bicep' in name_lower or 'bícep' in name_lower:
+            variations.extend([
+                'bicep curl',
+                'bícep curl', 
+                'curl de bíceps',
+                'curl de biceps',
+                'biceps curl',
+                'bíceps curl',
+                'curl',
+                'hammer curl',
+                'concentration curl'
+            ])
+        
+        # Variaciones para otros ejercicios comunes
+        if 'push' in name_lower or 'flexion' in name_lower:
+            variations.extend(['push up', 'push-up', 'flexiones', 'flexión'])
+        
+        if 'squat' in name_lower or 'sentadilla' in name_lower:
+            variations.extend(['squat', 'sentadillas', 'sentadilla'])
+        
+        # Remover duplicados y el nombre original
+        variations = list(set(variations))
+        if name_lower in variations:
+            variations.remove(name_lower)
+            
+        return variations
     
     async def get_active_workout(self, phone_number: str) -> Optional[Workout]:
         """

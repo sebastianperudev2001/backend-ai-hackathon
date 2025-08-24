@@ -37,6 +37,20 @@ class FitnessAgent(BaseAgent):
         - get_active_workout: Para verificar si hay una rutina en progreso
         - get_exercises: Para consultar ejercicios disponibles
         
+        EJERCICIOS DISPONIBLES EN LA BASE DE DATOS:
+        - Flexiones (pecho, tríceps, hombros)
+        - Sentadillas (piernas, glúteos)
+        - Plancha (core, estabilidad)
+        - Dominadas (espalda, bíceps)
+        - Lunges (piernas, glúteos)
+        - Burpees (cardio, cuerpo completo)
+        - Jumping Jacks (cardio)
+        - Mountain Climbers (cardio, core)
+        - Correr (cardio)
+        - Estiramiento de cuadriceps (flexibilidad)
+        - Estiramiento de isquiotibiales (flexibilidad)
+        - Gato-Vaca (flexibilidad, espalda)
+        
         ⚠️ IMPORTANTE - CUÁNDO USAR LAS HERRAMIENTAS:
         
         USA HERRAMIENTAS SOLO cuando el usuario:
@@ -74,6 +88,9 @@ class FitnessAgent(BaseAgent):
         - Para consultas generales, responde directamente con tu conocimiento
         - Solo usa herramientas para acciones concretas de entrenamiento
         - Siempre explica qué vas a hacer antes de usar una herramienta
+        - Si el usuario menciona un ejercicio que no está en la base de datos (como "bicep curl"), 
+          sugiere alternativas disponibles (como "Dominadas" para trabajar bíceps)
+        - NUNCA intentes registrar ejercicios que no existen en la lista de ejercicios disponibles
         
         Si el usuario menciona dolor, lesiones o condiciones médicas, recomienda 
         consultar con un profesional de la salud antes de continuar.
@@ -313,6 +330,58 @@ class FitnessAgent(BaseAgent):
         # Por defecto, para consultas ambiguas, no usar herramientas
         return False
     
+    def _extract_text_from_response(self, response) -> str:
+        """
+        Extraer texto limpio de respuestas complejas del agent executor
+        
+        Args:
+            response: Respuesta compleja del agent executor
+            
+        Returns:
+            String limpio con el texto de la respuesta
+        """
+        try:
+            # Si es una lista, buscar elementos de texto
+            if isinstance(response, list):
+                text_parts = []
+                for item in response:
+                    if isinstance(item, dict):
+                        # Buscar campo 'text'
+                        if 'text' in item:
+                            text_parts.append(item['text'])
+                        # Buscar otros campos de texto posibles
+                        elif 'content' in item:
+                            text_parts.append(item['content'])
+                        elif 'message' in item:
+                            text_parts.append(item['message'])
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+                
+                if text_parts:
+                    return ' '.join(text_parts)
+                else:
+                    # Si no hay texto, convertir toda la lista a string
+                    return str(response)
+            
+            # Si es un diccionario, buscar campos de texto
+            elif isinstance(response, dict):
+                if 'text' in response:
+                    return response['text']
+                elif 'content' in response:
+                    return response['content']
+                elif 'message' in response:
+                    return response['message']
+                else:
+                    return str(response)
+            
+            # Para cualquier otro tipo, convertir a string
+            else:
+                return str(response)
+                
+        except Exception as e:
+            logger.error(f"❌ Error extrayendo texto de respuesta: {str(e)}")
+            return str(response)
+    
     async def process_with_tools(self, input_text: str, phone_number: str, context: Optional[Dict[str, Any]] = None) -> str:
         """
         Procesar entrada usando herramientas (método principal para fitness)
@@ -360,14 +429,7 @@ class FitnessAgent(BaseAgent):
             # Asegurar que la respuesta es un string limpio
             if not isinstance(response, str):
                 logger.warning(f"⚠️ Agent executor devolvió tipo {type(response)}: {repr(response)}")
-                # Si es una lista, tomar el primer elemento de texto
-                if isinstance(response, list) and len(response) > 0:
-                    if isinstance(response[0], dict) and 'text' in response[0]:
-                        response = response[0]['text']
-                    else:
-                        response = str(response[0])
-                else:
-                    response = str(response)
+                response = self._extract_text_from_response(response)
             
             # Limpiar la respuesta
             response = response.strip()

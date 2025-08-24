@@ -72,6 +72,58 @@ class CoordinatorAgent:
         
         logger.info("✅ Coordinador multi-agente inicializado con LangGraph")
     
+    def _extract_text_from_response(self, response) -> str:
+        """
+        Extraer texto limpio de respuestas complejas de los agentes
+        
+        Args:
+            response: Respuesta compleja de un agente
+            
+        Returns:
+            String limpio con el texto de la respuesta
+        """
+        try:
+            # Si es una lista, buscar elementos de texto
+            if isinstance(response, list):
+                text_parts = []
+                for item in response:
+                    if isinstance(item, dict):
+                        # Buscar campo 'text'
+                        if 'text' in item:
+                            text_parts.append(item['text'])
+                        # Buscar otros campos de texto posibles
+                        elif 'content' in item:
+                            text_parts.append(item['content'])
+                        elif 'message' in item:
+                            text_parts.append(item['message'])
+                    elif isinstance(item, str):
+                        text_parts.append(item)
+                
+                if text_parts:
+                    return ' '.join(text_parts)
+                else:
+                    # Si no hay texto, convertir toda la lista a string
+                    return str(response)
+            
+            # Si es un diccionario, buscar campos de texto
+            elif isinstance(response, dict):
+                if 'text' in response:
+                    return response['text']
+                elif 'content' in response:
+                    return response['content']
+                elif 'message' in response:
+                    return response['message']
+                else:
+                    return str(response)
+            
+            # Para cualquier otro tipo, convertir a string
+            else:
+                return str(response)
+                
+        except Exception as e:
+            logger.error(f"❌ Error extrayendo texto de respuesta: {str(e)}")
+            return str(response)
+    
     def _build_graph(self) -> StateGraph:
         """
         Construir el grafo de flujo de trabajo con LangGraph siguiendo la arquitectura de supervisor
@@ -210,14 +262,7 @@ class CoordinatorAgent:
                 # Asegurar que la respuesta es un string limpio
                 if not isinstance(response, str):
                     logger.warning(f"⚠️ Respuesta del fitness agent no es string: {type(response)}")
-                    # Si es una lista con objetos de texto, extraer el texto
-                    if isinstance(response, list) and len(response) > 0:
-                        if isinstance(response[0], dict) and 'text' in response[0]:
-                            response = response[0]['text']
-                        else:
-                            response = str(response[0])
-                    else:
-                        response = str(response)
+                    response = self._extract_text_from_response(response)
                 
                 # Limpiar la respuesta final
                 response = response.strip()
@@ -262,14 +307,7 @@ class CoordinatorAgent:
                 # Asegurar que la respuesta es un string limpio
                 if not isinstance(response, str):
                     logger.warning(f"⚠️ Respuesta del nutrition agent no es string: {type(response)}")
-                    # Si es una lista con objetos de texto, extraer el texto
-                    if isinstance(response, list) and len(response) > 0:
-                        if isinstance(response[0], dict) and 'text' in response[0]:
-                            response = response[0]['text']
-                        else:
-                            response = str(response[0])
-                    else:
-                        response = str(response)
+                    response = self._extract_text_from_response(response)
                 
                 # Limpiar la respuesta final
                 response = response.strip()
