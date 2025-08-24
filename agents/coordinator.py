@@ -320,6 +320,10 @@ class CoordinatorAgent:
                 if context and 'sender' in context:
                     phone_number = context['sender']
                 
+                # Asegurar que el número tiene el prefijo + 
+                if not phone_number.startswith('+'):
+                    phone_number = '+' + phone_number
+                
                 # Obtener user_id para memoria persistente
                 user_id = self._get_user_id_from_phone(phone_number)
                 
@@ -380,6 +384,10 @@ class CoordinatorAgent:
                 context = state.get('context', None)
                 if context and 'sender' in context:
                     phone_number = context['sender']
+                
+                # Asegurar que el número tiene el prefijo + 
+                if not phone_number.startswith('+'):
+                    phone_number = '+' + phone_number
                 
                 # Obtener user_id para memoria persistente
                 user_id = self._get_user_id_from_phone(phone_number)

@@ -29,7 +29,8 @@ class StartWorkoutSchema(BaseModel):
 
 class EndWorkoutSchema(BaseModel):
     """Schema para finalizar rutina"""
-    workout_id: str = Field(description="ID de la rutina a finalizar")
+    workout_id: Optional[str] = Field(default=None, description="ID de la rutina a finalizar (opcional si se proporciona phone_number)")
+    phone_number: Optional[str] = Field(default=None, description="Número de teléfono del usuario para finalizar rutina activa")
     notes: Optional[str] = Field(default=None, description="Notas finales de la rutina")
 
 
@@ -57,6 +58,12 @@ class GetExercisesSchema(BaseModel):
     """Schema para obtener ejercicios"""
     category: Optional[str] = Field(default=None, description="Categoría: fuerza, cardio, flexibilidad")
     difficulty: Optional[str] = Field(default=None, description="Dificultad: principiante, intermedio, avanzado")
+
+
+class EndActiveWorkoutSchema(BaseModel):
+    """Schema para finalizar rutina activa por teléfono"""
+    phone_number: str = Field(description="Número de teléfono del usuario")
+    notes: Optional[str] = Field(default=None, description="Notas finales de la rutina")
 
 
 # ==================== TOOLS ====================
@@ -143,7 +150,8 @@ class EndWorkoutTool(BaseTool):
     """Tool para finalizar una rutina de ejercicio"""
     name: str = "end_workout"
     description: str = """
-    Finaliza una rutina de ejercicio activa.
+    Finaliza una rutina de ejercicio activa del usuario.
+    Si no se proporciona workout_id, finaliza automáticamente la rutina activa.
     Registra el momento de finalización y calcula la duración total.
     Usa esta herramienta cuando el usuario termine su sesión de entrenamiento.
     """
@@ -159,14 +167,26 @@ class EndWorkoutTool(BaseTool):
             self._fitness_repo = FitnessRepository()
         return self._fitness_repo
     
-    def _run(self, workout_id: str, notes: Optional[str] = None) -> str:
+    def _run(self, workout_id: str = None, phone_number: str = None, notes: Optional[str] = None) -> str:
         """Ejecutar la herramienta de forma síncrona"""
         import asyncio
-        return asyncio.run(self._arun(workout_id, notes))
+        return asyncio.run(self._arun(workout_id, phone_number, notes))
     
-    async def _arun(self, workout_id: str, notes: Optional[str] = None) -> str:
+    async def _arun(self, workout_id: str = None, phone_number: str = None, notes: Optional[str] = None) -> str:
         """Finalizar rutina de ejercicio"""
         try:
+            # Si no se proporciona workout_id, buscar la rutina activa
+            if not workout_id and phone_number:
+                active_workout = await self.fitness_repo.get_active_workout(phone_number)
+                if active_workout:
+                    workout_id = active_workout.id
+                    logger.info(f"✅ Rutina activa encontrada para finalizar: {workout_id}")
+                else:
+                    return "ℹ️ No hay rutinas activas para finalizar."
+            
+            if not workout_id:
+                return "❌ No se pudo identificar qué rutina finalizar. Proporciona el ID de la rutina o tu número de teléfono."
+            
             request = EndWorkoutRequest(
                 workout_id=workout_id,
                 notes=notes
@@ -413,6 +433,78 @@ class GetExercisesTool(BaseTool):
 
 # ==================== LISTA DE TOOLS ====================
 
+class EndActiveWorkoutTool(BaseTool):
+    """Tool para finalizar la rutina activa de un usuario por número de teléfono"""
+    name: str = "end_active_workout"
+    description: str = """
+    Finaliza automáticamente la rutina activa del usuario usando su número de teléfono.
+    Es más conveniente que end_workout cuando no conoces el workout_id específico.
+    Usa esta herramienta cuando el usuario quiera terminar su entrenamiento actual.
+    """
+    args_schema: type = EndActiveWorkoutSchema
+    
+    def __init__(self):
+        super().__init__()
+    
+    @property
+    def fitness_repo(self):
+        """Lazy loading del repositorio"""
+        if not hasattr(self, '_fitness_repo'):
+            self._fitness_repo = FitnessRepository()
+        return self._fitness_repo
+    
+    def _run(self, phone_number: str, notes: Optional[str] = None) -> str:
+        """Ejecutar la herramienta de forma síncrona"""
+        import asyncio
+        return asyncio.run(self._arun(phone_number, notes))
+    
+    async def _arun(self, phone_number: str, notes: Optional[str] = None) -> str:
+        """Finalizar rutina activa por número de teléfono"""
+        try:
+            # Buscar rutina activa
+            active_workout = await self.fitness_repo.get_active_workout(phone_number)
+            
+            if not active_workout:
+                return "ℹ️ No tienes rutinas activas para finalizar. Puedes iniciar una nueva rutina cuando quieras."
+            
+            # Finalizar la rutina activa
+            request = EndWorkoutRequest(
+                workout_id=active_workout.id,
+                notes=notes
+            )
+            
+            response = await self.fitness_repo.end_workout(request)
+            
+            if response.success:
+                # Obtener resumen de la rutina
+                summary = await self.fitness_repo.get_workout_summary(active_workout.id)
+                
+                if summary:
+                    summary_info = f"""
+🎉 ¡Rutina completada exitosamente!
+
+📝 **Rutina:** {summary.workout.name}
+⏱️ **Duración:** {summary.duration_minutes or 0} minutos
+📊 **Total de series:** {summary.total_sets}
+🏋️ **Ejercicios realizados:** {', '.join(summary.exercises_performed) if summary.exercises_performed else 'Ninguno registrado'}
+{f"⭐ **Dificultad promedio:** {summary.average_difficulty:.1f}/10" if summary.average_difficulty else ""}
+{f"📝 **Notas:** {summary.workout.notes}" if summary.workout.notes else ""}
+
+¡Excelente trabajo! 💪🔥
+
+¿Te gustaría iniciar una nueva rutina o revisar tus ejercicios disponibles?
+                    """
+                    return summary_info.strip()
+                else:
+                    return "✅ Rutina finalizada exitosamente. ¡Buen trabajo! 💪"
+            else:
+                return f"❌ Hubo un problema al finalizar la rutina: {response.message}"
+                
+        except Exception as e:
+            logger.error(f"❌ Error en EndActiveWorkoutTool: {str(e)}")
+            return "❌ Lo siento, no pude finalizar la rutina en este momento. Por favor, intenta nuevamente."
+
+
 def get_fitness_tools() -> List[BaseTool]:
     """
     Obtener todas las herramientas de fitness
@@ -420,9 +512,9 @@ def get_fitness_tools() -> List[BaseTool]:
     return [
         StartWorkoutTool(),
         EndWorkoutTool(),
+        EndActiveWorkoutTool(),  # Nueva herramienta
         AddSetTool(),
         GetActiveWorkoutTool(),
         GetExercisesTool()
     ]
 
-# No one is coming to save you. you either win or continue living in mediocrity.

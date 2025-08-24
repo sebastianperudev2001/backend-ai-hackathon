@@ -9,7 +9,7 @@ import sys
 # Agregar el directorio padre al path para importar módulos
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents.persistent_memory import PersistentChatMemory
+from agents.basic_memory import BasicPersistentMemory
 from agents.base_agent import BaseAgent
 from agents.fitness_agent import FitnessAgent
 
@@ -27,7 +27,7 @@ async def test_memory_initialization():
         user_id = "617ebc4e-d3f0-42d4-a8ea-1cf5afca8f03"
         
         # Test 1: Crear memoria con parámetros correctos
-        memory = PersistentChatMemory(
+        memory = BasicPersistentMemory(
             user_id=user_id,
             memory_key="chat_history",
             return_messages=True

@@ -1,12 +1,11 @@
 """
-Memoria persistente personalizada para LangChain que se integra con Supabase
+Memoria persistente simplificada que evita problemas de Pydantic
 """
 import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from langchain.memory.chat_memory import BaseChatMemory
 from langchain.schema import BaseMessage, HumanMessage, AIMessage, SystemMessage
-from pydantic import Field
 
 from domain.models import (
     ConversationMessageType, AddMessageRequest, ConversationMessage
@@ -16,48 +15,36 @@ from repository.conversation_repository import ConversationRepository
 logger = logging.getLogger(__name__)
 
 
-class PersistentChatMemory(BaseChatMemory):
+class SimplePersistentMemory(BaseChatMemory):
     """
-    Memoria de chat persistente que almacena conversaciones en Supabase
-    y se integra con LangChain
+    Memoria persistente simplificada que almacena conversaciones en Supabase
     """
-    
-    conversation_repo: ConversationRepository = Field(default_factory=ConversationRepository)
-    session_id: Optional[str] = Field(default=None)
-    user_id: str = Field(...)
-    max_token_limit: int = Field(default=4000)
-    return_messages: bool = Field(default=True)
-    
-    class Config:
-        arbitrary_types_allowed = True
     
     def __init__(self, user_id: str, session_id: Optional[str] = None, **kwargs):
         """
-        Inicializar memoria persistente
+        Inicializar memoria persistente simplificada
         
         Args:
             user_id: ID del usuario
-            session_id: ID de la sesión (opcional, se creará una si no se proporciona)
-            **kwargs: Argumentos adicionales
+            session_id: ID de la sesión (opcional)
+            **kwargs: Argumentos para BaseChatMemory
         """
-        try:
-            # Llamar a super().__init__ primero para inicializar Pydantic correctamente
-            super().__init__(**kwargs)
-            
-            # Establecer propiedades después de la inicialización de Pydantic
-            object.__setattr__(self, 'user_id', user_id)
-            object.__setattr__(self, 'session_id', session_id)
-            object.__setattr__(self, 'conversation_repo', ConversationRepository())
-            
-            logger.info(f"✅ Memoria persistente inicializada para usuario: {user_id}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error inicializando memoria persistente: {str(e)}")
-            # Intentar inicialización simple sin Pydantic
-            self.user_id = user_id
-            self.session_id = session_id
-            self.conversation_repo = ConversationRepository()
-            logger.info(f"⚠️ Memoria persistente inicializada en modo simple para usuario: {user_id}")
+        # Establecer valores por defecto para kwargs
+        if 'memory_key' not in kwargs:
+            kwargs['memory_key'] = 'chat_history'
+        if 'return_messages' not in kwargs:
+            kwargs['return_messages'] = True
+        
+        # Inicializar clase padre
+        super().__init__(**kwargs)
+        
+        # Establecer propiedades propias
+        self.user_id = user_id
+        self.session_id = session_id
+        self.conversation_repo = ConversationRepository()
+        self.max_token_limit = 4000
+        
+        logger.info(f"✅ Memoria persistente simple inicializada para usuario: {user_id}")
     
     async def ensure_session(self) -> str:
         """
@@ -95,16 +82,15 @@ class PersistentChatMemory(BaseChatMemory):
         """
         try:
             # Cargar mensajes desde la base de datos de forma síncrona
-            # Nota: En un entorno async real, esto debería ser manejado diferente
             import asyncio
             
             # Obtener el loop de eventos actual o crear uno nuevo
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # Si ya hay un loop corriendo, crear una tarea
-                    messages = []
-                    logger.warning("⚠️ Loop de eventos ya corriendo, usando memoria local")
+                    # Si ya hay un loop corriendo, usar memoria local por ahora
+                    messages = self._get_local_messages()
+                    logger.warning("⚠️ Loop de eventos corriendo, usando memoria local")
                 else:
                     messages = loop.run_until_complete(self._load_messages_async())
             except RuntimeError:
@@ -120,8 +106,24 @@ class PersistentChatMemory(BaseChatMemory):
                 
         except Exception as e:
             logger.error(f"❌ Error cargando memoria: {str(e)}")
-            # Retornar memoria vacía en caso de error
-            return {self.memory_key: [] if self.return_messages else ""}
+            # Retornar memoria local como fallback
+            local_messages = self._get_local_messages()
+            if self.return_messages:
+                return {self.memory_key: local_messages}
+            else:
+                buffer = self._messages_to_string(local_messages)
+                return {self.memory_key: buffer}
+    
+    def _get_local_messages(self) -> List[BaseMessage]:
+        """
+        Obtener mensajes de la memoria local
+        
+        Returns:
+            Lista de mensajes locales
+        """
+        if hasattr(self, 'chat_memory') and hasattr(self.chat_memory, 'messages'):
+            return self.chat_memory.messages
+        return []
     
     async def _load_messages_async(self) -> List[BaseMessage]:
         """
@@ -155,20 +157,23 @@ class PersistentChatMemory(BaseChatMemory):
             
         except Exception as e:
             logger.error(f"❌ Error cargando mensajes async: {str(e)}")
-            return []
+            return self._get_local_messages()
     
     def save_context(self, inputs: Dict[str, Any], outputs: Dict[str, str]) -> None:
         """
-        Guardar contexto de la conversación en la base de datos
+        Guardar contexto de la conversación
         
         Args:
             inputs: Inputs del usuario
             outputs: Outputs del agente
         """
         try:
+            # Primero guardar en memoria local
+            super().save_context(inputs, outputs)
+            
+            # Luego intentar guardar en BD de forma asíncrona
             import asyncio
             
-            # Ejecutar guardado de forma asíncrona
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
@@ -182,6 +187,7 @@ class PersistentChatMemory(BaseChatMemory):
                 
         except Exception as e:
             logger.error(f"❌ Error guardando contexto: {str(e)}")
+            # Continuar con memoria local
     
     async def _save_context_async(self, inputs: Dict[str, Any], outputs: Dict[str, str]) -> None:
         """
@@ -221,42 +227,10 @@ class PersistentChatMemory(BaseChatMemory):
     
     def clear(self) -> None:
         """
-        Limpiar memoria (crear nueva sesión)
+        Limpiar memoria
         """
-        try:
-            import asyncio
-            
-            # Desactivar sesión actual y crear una nueva
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(self._clear_async())
-                else:
-                    loop.run_until_complete(self._clear_async())
-            except RuntimeError:
-                asyncio.run(self._clear_async())
-                
-        except Exception as e:
-            logger.error(f"❌ Error limpiando memoria: {str(e)}")
-    
-    async def _clear_async(self) -> None:
-        """
-        Limpiar memoria de forma asíncrona
-        """
-        try:
-            if self.session_id:
-                # Marcar sesión actual como inactiva
-                # (esto se podría implementar en el repositorio si es necesario)
-                pass
-            
-            # Crear nueva sesión
-            response = await self.conversation_repo.get_or_create_active_session(self.user_id)
-            if response.success and response.session:
-                self.session_id = response.session.id
-                logger.info(f"✅ Nueva sesión creada: {self.session_id}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error limpiando memoria async: {str(e)}")
+        super().clear()
+        logger.info("🧹 Memoria local limpiada")
     
     def _messages_to_string(self, messages: List[BaseMessage]) -> str:
         """
@@ -278,30 +252,6 @@ class PersistentChatMemory(BaseChatMemory):
                 string_messages.append(f"Sistema: {message.content}")
         
         return "\n".join(string_messages)
-    
-    async def add_system_message(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Agregar un mensaje del sistema
-        
-        Args:
-            content: Contenido del mensaje
-            metadata: Metadatos adicionales
-        """
-        try:
-            session_id = await self.ensure_session()
-            
-            system_message = AddMessageRequest(
-                session_id=session_id,
-                message_type=ConversationMessageType.SYSTEM,
-                content=content,
-                metadata=metadata or {"source": "system"}
-            )
-            
-            await self.conversation_repo.add_message(system_message)
-            logger.info("✅ Mensaje del sistema agregado")
-            
-        except Exception as e:
-            logger.error(f"❌ Error agregando mensaje del sistema: {str(e)}")
     
     async def get_conversation_summary(self) -> str:
         """
@@ -336,4 +286,8 @@ class PersistentChatMemory(BaseChatMemory):
             
         except Exception as e:
             logger.error(f"❌ Error obteniendo resumen: {str(e)}")
-            return "Error obteniendo resumen de conversación"
+            # Fallback a resumen local
+            local_messages = self._get_local_messages()
+            human_count = len([m for m in local_messages if isinstance(m, HumanMessage)])
+            ai_count = len([m for m in local_messages if isinstance(m, AIMessage)])
+            return f"Conversación local: {len(local_messages)} mensajes ({human_count} del usuario, {ai_count} del asistente)"

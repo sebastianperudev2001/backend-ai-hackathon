@@ -8,7 +8,7 @@ from langchain.agents import AgentExecutor
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import BaseMessage, HumanMessage, SystemMessage, AIMessage
 from config.settings import get_settings
-from agents.persistent_memory import PersistentChatMemory
+from agents.basic_memory import BasicPersistentMemory
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ class BaseAgent:
         # Memoria del agente - usar memoria persistente si se proporciona user_id
         if user_id:
             try:
-                self.memory = PersistentChatMemory(
+                self.memory = BasicPersistentMemory(
                     user_id=user_id,
                     memory_key="chat_history",
                     return_messages=True
@@ -155,7 +155,7 @@ class BaseAgent:
         Returns:
             Resumen de la conversación
         """
-        if isinstance(self.memory, PersistentChatMemory):
+        if isinstance(self.memory, BasicPersistentMemory):
             return await self.memory.get_conversation_summary()
         else:
             # Para memoria en memoria, crear resumen básico
@@ -172,8 +172,10 @@ class BaseAgent:
             content: Contenido del mensaje del sistema
             metadata: Metadatos adicionales
         """
-        if isinstance(self.memory, PersistentChatMemory):
-            await self.memory.add_system_message(content, metadata)
+        if isinstance(self.memory, BasicPersistentMemory):
+            # Para memoria persistente básica, agregar directamente
+            system_message = SystemMessage(content=content)
+            self.memory.add_message(system_message)
         else:
             # Para memoria en memoria, agregar directamente
             system_message = SystemMessage(content=content)
