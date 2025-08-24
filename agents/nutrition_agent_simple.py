@@ -480,12 +480,12 @@ class NutritionAgent(BaseAgent):
         patterns = [
             # "6 huevos grandes (55g)"
             r"(\d+)\s*(huevos?)\s*(?:grandes?|medianos?|pequeños?)?\s*(?:\((\d+)g?\))?",
-            # "40g de avena"
-            r"(\d+)g?\s*de\s*(\w+)",
+            # "40g de avena" - Match multiple words for compound foods
+            r"(\d+)g?\s*de\s*([\w\s]+?)(?:\s|$)",
             # "platano de 150g"
-            r"(\w+)\s*de\s*(\d+)g?",
-            # "150g platano"
-            r"(\d+)g?\s*(\w+)",
+            r"([\w\s]+?)\s*de\s*(\d+)g?",
+            # "150g platano" - But exclude common prepositions
+            r"(\d+)g?\s*(?!de\s)([\w\s]+?)(?:\s|$)",
         ]
         
         # Mapeo de nombres comunes a nombres estándar
@@ -498,9 +498,15 @@ class NutritionAgent(BaseAgent):
             "pollo": "pechuga de pollo", "pechuga": "pechuga de pollo"
         }
         
+        # Lista de palabras a excluir (preposiciones, artículos, etc.)
+        exclude_words = {"de", "del", "la", "el", "un", "una", "y", "con", "sin", "para", "por", "en"}
+        
         for pattern in patterns:
             matches = re.findall(pattern, message_lower)
             for match in matches:
+                food = None
+                total_weight = None
+                
                 if len(match) == 3:  # cantidad, alimento, peso extra
                     quantity, food, extra_weight = match
                     if extra_weight:
@@ -518,14 +524,24 @@ class NutritionAgent(BaseAgent):
                 else:
                     continue
                 
-                # Normalizar nombre del alimento
-                normalized_food = food_mapping.get(food, food)
-                
-                parsed_foods.append({
-                    "name": normalized_food,
-                    "quantity": total_weight,
-                    "unit": "g"
-                })
+                # Limpiar el nombre del alimento
+                if food:
+                    food = food.strip()
+                    # Excluir palabras comunes que no son alimentos
+                    if food.lower() in exclude_words or len(food) < 3:
+                        continue
+                        
+                    # Normalizar nombre del alimento
+                    normalized_food = food_mapping.get(food, food)
+                    
+                    # Evitar duplicados
+                    existing_food = next((f for f in parsed_foods if f["name"] == normalized_food), None)
+                    if not existing_food:
+                        parsed_foods.append({
+                            "name": normalized_food,
+                            "quantity": total_weight,
+                            "unit": "g"
+                        })
         
         # Log de lo que se parseó
         logger.info(f"🔍 Parsed foods: {parsed_foods}")

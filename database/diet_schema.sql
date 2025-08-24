@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS foods (
     category VARCHAR(100) NOT NULL, -- 'proteinas', 'carbohidratos', 'grasas', 'verduras', 'frutas', 'lacteos', 'legumbres', 'granos', 'condimentos'
     
     -- Macronutrientes por 100g
-    calories_per_100g DECIMAL(6,2) NOT NULL,
+    calories_per_100g DECIMAL(6,2) NOT NULL, -- kcal per 100g (kilocalories)
     protein_per_100g DECIMAL(5,2) NOT NULL DEFAULT 0,
     carbs_per_100g DECIMAL(5,2) NOT NULL DEFAULT 0,
     fat_per_100g DECIMAL(5,2) NOT NULL DEFAULT 0,
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS planned_meal_ingredients (
     quantity_grams DECIMAL(8,2) NOT NULL,
     
     -- Valores nutricionales calculados para esta cantidad
-    calories DECIMAL(8,2) NOT NULL,
+    calories DECIMAL(8,2) NOT NULL, -- kcal calculated for this quantity
     protein_g DECIMAL(6,2) NOT NULL,
     carbs_g DECIMAL(6,2) NOT NULL,
     fat_g DECIMAL(6,2) NOT NULL,
@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS consumed_meal_ingredients (
     quantity_grams DECIMAL(8,2) NOT NULL,
     
     -- Valores nutricionales para esta cantidad
-    calories DECIMAL(8,2) NOT NULL,
+    calories DECIMAL(8,2) NOT NULL, -- kcal for this quantity
     protein_g DECIMAL(6,2) NOT NULL,
     carbs_g DECIMAL(6,2) NOT NULL,
     fat_g DECIMAL(6,2) NOT NULL,
@@ -319,6 +319,7 @@ CREATE OR REPLACE FUNCTION calculate_nutrition_values()
 RETURNS TRIGGER AS $$
 BEGIN
     -- Calcular valores nutricionales basados en la cantidad y el alimento
+    -- Los valores de calorías son en kcal (kilocalorías)
     SELECT 
         (NEW.quantity_grams / 100.0) * f.calories_per_100g,
         (NEW.quantity_grams / 100.0) * f.protein_per_100g,

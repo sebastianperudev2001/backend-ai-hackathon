@@ -35,7 +35,7 @@ class NutritionTools:
             target_date: Fecha objetivo en formato YYYY-MM-DD (opcional, por defecto hoy)
         
         Returns:
-            Dict con comidas planificadas, consumidas y resumen nutricional
+            Dict con comidas planificadas, consumidas y resumen nutricional (valores en kcal)
         """
         try:
             # Convertir fecha si se proporciona
@@ -112,9 +112,9 @@ class NutritionTools:
                     for meal in consumed_meals
                 ],
                 "nutrition_summary": {
-                    "target_calories": nutrition_summary.target_calories if nutrition_summary else 0,
-                    "consumed_calories": float(nutrition_summary.consumed_calories) if nutrition_summary else 0,
-                    "calorie_deficit_surplus": float(nutrition_summary.calorie_deficit_surplus) if nutrition_summary else 0,
+                    "target_calories": nutrition_summary.target_calories if nutrition_summary else 0,  # kcal
+                    "consumed_calories": float(nutrition_summary.consumed_calories) if nutrition_summary else 0,  # kcal
+                    "calorie_deficit_surplus": float(nutrition_summary.calorie_deficit_surplus) if nutrition_summary else 0,  # kcal
                     "target_protein_g": float(nutrition_summary.target_protein_g) if nutrition_summary else 0,
                     "consumed_protein_g": float(nutrition_summary.consumed_protein_g) if nutrition_summary else 0,
                     "target_carbs_g": float(nutrition_summary.target_carbs_g) if nutrition_summary else 0,
@@ -225,7 +225,7 @@ class NutritionTools:
             target_date: Fecha objetivo (opcional)
         
         Returns:
-            Dict con análisis nutricional y recomendaciones
+            Dict con análisis nutricional y recomendaciones (valores en kcal)
         """
         try:
             # Convertir fecha si se proporciona
@@ -262,9 +262,9 @@ class NutritionTools:
             }
             
             if total_consumed_calories > 0:
-                protein_calories = float(summary.consumed_protein_g) * 4  # 4 cal/g
-                carbs_calories = float(summary.consumed_carbs_g) * 4      # 4 cal/g
-                fat_calories = float(summary.consumed_fat_g) * 9          # 9 cal/g
+                protein_calories = float(summary.consumed_protein_g) * 4  # 4 kcal/g protein
+                carbs_calories = float(summary.consumed_carbs_g) * 4      # 4 kcal/g carbohydrates  
+                fat_calories = float(summary.consumed_fat_g) * 9          # 9 kcal/g fat
                 
                 macro_percentages = {
                     "protein_percent": round((protein_calories / total_consumed_calories) * 100, 1),
@@ -276,10 +276,10 @@ class NutritionTools:
                 "success": True,
                 "date": parsed_date.strftime("%Y-%m-%d"),
                 "daily_summary": {
-                    "target_calories": summary.target_calories,
-                    "consumed_calories": float(summary.consumed_calories),
-                    "remaining_calories": summary.target_calories - float(summary.consumed_calories),
-                    "calorie_deficit_surplus": float(summary.calorie_deficit_surplus),
+                    "target_calories": summary.target_calories,  # kcal
+                    "consumed_calories": float(summary.consumed_calories),  # kcal
+                    "remaining_calories": summary.target_calories - float(summary.consumed_calories),  # kcal
+                    "calorie_deficit_surplus": float(summary.calorie_deficit_surplus),  # kcal
                     "adherence_percentage": float(summary.adherence_percentage),
                     "meals_completed": summary.meals_completed,
                     "meals_planned": summary.meals_planned,
@@ -334,11 +334,11 @@ class NutritionTools:
             # Análisis calórico
             calorie_deficit = float(summary.calorie_deficit_surplus)
             if calorie_deficit > 300:
-                recommendations.append("Estás consumiendo pocas calorías. Considera agregar una colación saludable.")
+                recommendations.append("Estás consumiendo pocas kcal. Considera agregar una colación saludable.")
             elif calorie_deficit < -300:
-                recommendations.append("Has excedido tus calorías objetivo. Trata de reducir las porciones en la próxima comida.")
+                recommendations.append("Has excedido tu objetivo de kcal. Trata de reducir las porciones en la próxima comida.")
             elif -100 <= calorie_deficit <= 100:
-                recommendations.append("¡Excelente! Estás muy cerca de tu objetivo calórico.")
+                recommendations.append("¡Excelente! Estás muy cerca de tu objetivo de kcal.")
             
             # Análisis de proteínas
             protein_deficit = float(summary.target_protein_g) - float(summary.consumed_protein_g)
@@ -418,7 +418,7 @@ class NutritionTools:
                         "name": food.name,
                         "name_es": food.name_es,
                         "category": food.category.value,
-                        "calories_per_100g": float(food.calories_per_100g),
+                        "calories_per_100g": float(food.calories_per_100g),  # kcal per 100g
                         "protein_per_100g": float(food.protein_per_100g),
                         "carbs_per_100g": float(food.carbs_per_100g),
                         "fat_per_100g": float(food.fat_per_100g),
@@ -499,14 +499,14 @@ class NutritionTools:
                         "id": consumed_meal.id,
                         "meal_name": consumed_meal.meal_name,
                         "meal_type": consumed_meal.meal_type.value,
-                        "total_calories": float(consumed_meal.total_calories),
+                        "total_calories": float(consumed_meal.total_calories),  # kcal
                         "total_protein_g": float(consumed_meal.total_protein_g),
                         "total_carbs_g": float(consumed_meal.total_carbs_g),
                         "total_fat_g": float(consumed_meal.total_fat_g),
                         "consumed_at": consumed_meal.consumed_at.strftime("%H:%M"),
                         "satisfaction_rating": consumed_meal.satisfaction_rating
                     },
-                    "message": f"Comida '{meal_name}' registrada exitosamente con {float(consumed_meal.total_calories)} calorías"
+                    "message": f"Comida '{meal_name}' registrada exitosamente con {float(consumed_meal.total_calories)} kcal"
                 }
             else:
                 return {
@@ -556,14 +556,14 @@ class NutritionTools:
                         "Reducir aceite de 15ml a 10ml para mantener calorías objetivo"
                     ],
                     "nutrition_impact": {
-                        "calorie_change": -15,
+                        "calorie_change": -15,  # kcal
                         "protein_change": +2.5,
                         "carbs_change": -3.2,
                         "fat_change": -0.8,
                         "fiber_change": +4.1
                     }
                 },
-                "message": "Se generaron sugerencias para optimizar tu comida manteniendo el objetivo calórico"
+                "message": "Se generaron sugerencias para optimizar tu comida manteniendo el objetivo de kcal"
             }
             
         except Exception as e:
