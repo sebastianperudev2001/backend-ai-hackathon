@@ -61,17 +61,32 @@ class SupabaseClient:
         """
         Establecer contexto de usuario para RLS (Row Level Security)
         """
-        if self._client:
-            try:
-                # Establecer el user_id en el contexto de la sesión
-                self._client.rpc('set_config', {
-                    'setting_name': 'app.current_user_id',
-                    'new_value': user_id,
-                    'is_local': True
-                }).execute()
-                logger.debug(f"🔐 Contexto de usuario establecido: {user_id}")
-            except Exception as e:
-                logger.warning(f"⚠️ No se pudo establecer contexto de usuario: {str(e)}")
+        if not self._client:
+            logger.warning("⚠️ Cliente de Supabase no inicializado, no se puede establecer contexto")
+            return False
+            
+        try:
+            # Establecer el user_id en el contexto de la sesión
+            result = self._client.rpc('set_config', {
+                'setting_name': 'app.current_user_id',
+                'new_value': user_id,
+                'is_local': True
+            }).execute()
+            
+            logger.debug(f"🔐 Contexto de usuario establecido: {user_id}")
+            return True
+            
+        except Exception as e:
+            # Log detallado del error para debugging
+            error_msg = str(e)
+            if "Could not find the function" in error_msg and "set_config" in error_msg:
+                logger.warning(f"⚠️ Función set_config no encontrada en la base de datos.")
+                logger.warning(f"   Ejecuta el esquema actualizado en Supabase SQL Editor.")
+                logger.warning(f"   Las políticas RLS pueden no funcionar correctamente sin contexto de usuario.")
+            else:
+                logger.warning(f"⚠️ Error estableciendo contexto de usuario: {error_msg}")
+            
+            return False
 
 
 def get_supabase_client() -> SupabaseClient:

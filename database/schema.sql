@@ -183,6 +183,15 @@ CREATE POLICY "Everyone can read exercises" ON exercises
 CREATE POLICY "Only admins can modify exercises" ON exercises
     FOR ALL USING (current_setting('app.user_role', true) = 'admin');
 
+-- Función para establecer configuración de sesión (necesaria para RLS)
+CREATE OR REPLACE FUNCTION set_config(setting_name text, new_value text, is_local boolean DEFAULT false)
+RETURNS text AS $$
+BEGIN
+    PERFORM set_config(setting_name, new_value, is_local);
+    RETURN new_value;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Insertar usuario demo para pruebas
 INSERT INTO users (
     phone_number, 
