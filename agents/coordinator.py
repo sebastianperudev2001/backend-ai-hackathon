@@ -312,7 +312,9 @@ class CoordinatorAgent:
             'comida', 'comidas', 'desayuno', 'almuerzo', 'cena', 'dieta', 'nutrición',
             'calorias', 'calorías', 'macros', 'proteinas', 'proteínas', 'alimentación',
             'siguiente comida', 'que como', 'qué como', 'plan de hoy', 'deficit',
-            'alimento', 'alimentos', 'buscar', 'ingrediente', 'registrar'
+            'alimento', 'alimentos', 'buscar', 'ingrediente', 'registrar',
+            'plan de dieta', 'plan activo', 'dieta activa', 'mi plan', 'plan que tengo',
+            'dieta que tengo', 'mi dieta', 'plan actual', 'dieta actual'
         ]
         
         # Palabras clave para fitness
