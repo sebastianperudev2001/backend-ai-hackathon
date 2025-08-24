@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class NutritionAgent(BaseAgent):
     """Agente especializado en nutrición y dietas"""
     
-    def __init__(self):
+    def __init__(self, user_id: Optional[str] = None):
         system_prompt = """
         Eres un nutricionista virtual especializado en ayudar con dietas y alimentación.
         Puedes consultar comidas del día, analizar progreso nutricional, buscar alimentos,
@@ -25,9 +25,11 @@ class NutritionAgent(BaseAgent):
         """
         super().__init__(
             name="nutrition_agent",
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            user_id=user_id
         )
         self.nutrition_tools = NutritionTools()
+        self.user_id = user_id
     
     def can_handle(self, message: str, context: Dict[str, Any]) -> bool:
         """Determinar si este agente puede manejar el mensaje"""
