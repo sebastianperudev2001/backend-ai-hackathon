@@ -131,6 +131,7 @@ class FitnessRepository:
             # Intentar obtener usuario existente
             user = await self.get_user_by_phone(phone_number)
             if user:
+                logger.info(f"🔍 Usuario existente encontrado: {user.id} para teléfono {phone_number}")
                 # Actualizar última actividad
                 await self.update_user_activity(user.id)
                 return user
@@ -143,6 +144,7 @@ class FitnessRepository:
             
             response = await self.create_user(create_request)
             if response.success:
+                logger.info(f"🔍 Nuevo usuario creado: {response.user.id} para teléfono {phone_number}")
                 return response.user
             
             logger.warning(f"⚠️ No se pudo crear usuario para {phone_number}")
@@ -185,10 +187,17 @@ class FitnessRepository:
                 )
             
             # Establecer contexto de usuario para RLS
+            logger.info(f"🔍 Intentando establecer contexto para user_id: {request.user_id}")
             context_set = self.supabase_client.set_user_context(request.user_id)
             if not context_set:
                 logger.warning(f"⚠️ No se pudo establecer contexto de usuario para {request.user_id}")
-                logger.warning("   Las políticas RLS pueden fallar. Verifica que la función set_config exista.")
+                return WorkoutResponse(
+                    success=False,
+                    message="Error de configuración de seguridad",
+                    error="No se pudo establecer el contexto de usuario. Verifica la configuración de RLS en Supabase."
+                )
+            else:
+                logger.info(f"✅ Contexto establecido correctamente para user_id: {request.user_id}")
             
             # Crear nuevo workout
             workout_data = {
@@ -199,7 +208,31 @@ class FitnessRepository:
                 "total_sets": 0
             }
             
-            result = self.supabase_client.client.table("workouts").insert(workout_data).execute()
+            try:
+                result = self.supabase_client.client.table("workouts").insert(workout_data).execute()
+            except Exception as db_error:
+                error_msg = str(db_error)
+                logger.error(f"❌ Error de base de datos al crear workout: {error_msg}")
+                
+                # Mensajes de error más amigables
+                if "row-level security policy" in error_msg.lower():
+                    return WorkoutResponse(
+                        success=False,
+                        message="Error de permisos al crear la rutina",
+                        error="Las políticas de seguridad impidieron crear la rutina. Verifica la configuración de RLS."
+                    )
+                elif "violates foreign key constraint" in error_msg.lower():
+                    return WorkoutResponse(
+                        success=False,
+                        message="Error: Usuario no válido",
+                        error="El usuario especificado no existe en la base de datos."
+                    )
+                else:
+                    return WorkoutResponse(
+                        success=False,
+                        message="Error técnico al crear la rutina",
+                        error=f"Error de base de datos: {error_msg[:100]}..."
+                    )
             
             if result.data:
                 workout = Workout(**result.data[0])

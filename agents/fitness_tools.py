@@ -115,7 +115,24 @@ class StartWorkoutTool(BaseTool):
                 """
                 return workout_info.strip()
             else:
-                return f"❌ Error al iniciar rutina: {response.error or response.message}"
+                # Mensaje de error más amigable para el usuario
+                if "configuración de seguridad" in response.message:
+                    return f"""
+❌ Lo siento, parece que hubo un error técnico al intentar iniciar la rutina. 
+
+Por favor, intenta nuevamente en unos momentos. 
+
+💡 **Mientras tanto, te sugiero que realices un calentamiento adecuado:**
+• 5-10 minutos de caminata o trote suave
+• 10 rotaciones de tobillos (cada pie)  
+• 10 rotaciones de rodillas
+• 10 rotaciones de caderas
+• 10 rotaciones de hombros
+
+¿Te gustaría intentar iniciar la rutina nuevamente?
+                    """.strip()
+                else:
+                    return f"❌ Error al iniciar rutina: {response.message}"
                 
         except Exception as e:
             logger.error(f"❌ Error en StartWorkoutTool: {str(e)}")
