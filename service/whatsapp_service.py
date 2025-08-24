@@ -141,7 +141,7 @@ class WhatsAppService:
         logger.info(f"📝 Texto de {sender}: {text}")
         
         # Lógica de negocio: Analizar el texto y responder
-        response_text = await self._generate_text_response(text)
+        response_text = await self._generate_text_response(text, sender)
         
         # Validar respuesta antes de enviar
         if not self._validate_message_for_whatsapp(response_text):
@@ -226,13 +226,14 @@ class WhatsAppService:
         
         return True
 
-    async def _generate_text_response(self, text: str) -> str:
+    async def _generate_text_response(self, text: str, sender: str = None) -> str:
         """
         Generar respuesta basada en el texto recibido
         Usa el sistema multi-agente con Claude si está disponible
         
         Args:
             text: Texto del usuario
+            sender: Número de teléfono del remitente
             
         Returns:
             Texto de respuesta sanitizado para WhatsApp
@@ -245,7 +246,8 @@ class WhatsAppService:
                 # Preparar contexto adicional si es necesario
                 context = {
                     "platform": "WhatsApp",
-                    "timestamp": self._get_current_timestamp()
+                    "timestamp": self._get_current_timestamp(),
+                    "sender": sender
                 }
                 
                 # Procesar con el coordinador de agentes

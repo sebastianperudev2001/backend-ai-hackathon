@@ -21,6 +21,7 @@ class GraphState(TypedDict):
     """Estado del grafo de agentes - simplificado para arquitectura supervisor"""
     messages: Annotated[list, add_messages]
     next_agent: Optional[str]
+    context: Optional[Dict[str, Any]]
 
 
 class CoordinatorAgent:
@@ -193,8 +194,33 @@ class CoordinatorAgent:
                 
                 logger.info(f"🏋️ Procesando consulta con agente de fitness: '{user_query[:50]}...'")
                 
-                # Llamar al agente de fitness
-                response = await self.fitness_agent.process(user_query)
+                # Extraer phone_number del contexto si está disponible
+                phone_number = "+51998555878"  # Default demo user
+                context = state.get('context', None)
+                if context and 'sender' in context:
+                    phone_number = context['sender']
+                
+                # Llamar al agente de fitness con herramientas
+                response = await self.fitness_agent.process_with_tools(
+                    input_text=user_query,
+                    phone_number=phone_number,
+                    context=context
+                )
+                
+                # Asegurar que la respuesta es un string limpio
+                if not isinstance(response, str):
+                    logger.warning(f"⚠️ Respuesta del fitness agent no es string: {type(response)}")
+                    # Si es una lista con objetos de texto, extraer el texto
+                    if isinstance(response, list) and len(response) > 0:
+                        if isinstance(response[0], dict) and 'text' in response[0]:
+                            response = response[0]['text']
+                        else:
+                            response = str(response[0])
+                    else:
+                        response = str(response)
+                
+                # Limpiar la respuesta final
+                response = response.strip()
                 
                 # Agregar la respuesta a los mensajes
                 state["messages"].append(AIMessage(content=response))
@@ -233,6 +259,21 @@ class CoordinatorAgent:
                 # Llamar al agente de nutrición
                 response = await self.nutrition_agent.process(user_query)
                 
+                # Asegurar que la respuesta es un string limpio
+                if not isinstance(response, str):
+                    logger.warning(f"⚠️ Respuesta del nutrition agent no es string: {type(response)}")
+                    # Si es una lista con objetos de texto, extraer el texto
+                    if isinstance(response, list) and len(response) > 0:
+                        if isinstance(response[0], dict) and 'text' in response[0]:
+                            response = response[0]['text']
+                        else:
+                            response = str(response[0])
+                    else:
+                        response = str(response)
+                
+                # Limpiar la respuesta final
+                response = response.strip()
+                
                 # Agregar la respuesta a los mensajes
                 state["messages"].append(AIMessage(content=response))
                 
@@ -270,7 +311,8 @@ class CoordinatorAgent:
             # Preparar estado inicial simplificado
             initial_state = GraphState(
                 messages=[HumanMessage(content=user_input)],
-                next_agent=None
+                next_agent=None,
+                context=context
             )
             
             # Log de inicio de procesamiento

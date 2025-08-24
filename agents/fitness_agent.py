@@ -357,6 +357,21 @@ class FitnessAgent(BaseAgent):
             
             response = result.get("output", "Lo siento, no pude procesar tu solicitud.")
             
+            # Asegurar que la respuesta es un string limpio
+            if not isinstance(response, str):
+                logger.warning(f"⚠️ Agent executor devolvió tipo {type(response)}: {repr(response)}")
+                # Si es una lista, tomar el primer elemento de texto
+                if isinstance(response, list) and len(response) > 0:
+                    if isinstance(response[0], dict) and 'text' in response[0]:
+                        response = response[0]['text']
+                    else:
+                        response = str(response[0])
+                else:
+                    response = str(response)
+            
+            # Limpiar la respuesta
+            response = response.strip()
+            
             # Guardar en memoria
             self.memory.save_context(
                 {"input": input_text},
