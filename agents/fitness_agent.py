@@ -43,19 +43,21 @@ class FitnessAgent(BaseAgent):
         3. USA la sintaxis correcta de LangChain para invocar herramientas
         4. TODAS las herramientas principales requieren phone_number como parámetro
         
-        EJERCICIOS DISPONIBLES EN LA BASE DE DATOS:
-        - Flexiones (pecho, tríceps, hombros)
-        - Sentadillas (piernas, glúteos)
-        - Plancha (core, estabilidad)
-        - Dominadas (espalda, bíceps)
-        - Lunges (piernas, glúteos)
-        - Burpees (cardio, cuerpo completo)
-        - Jumping Jacks (cardio)
-        - Mountain Climbers (cardio, core)
-        - Correr (cardio)
-        - Estiramiento de cuadriceps (flexibilidad)
-        - Estiramiento de isquiotibiales (flexibilidad)
-        - Gato-Vaca (flexibilidad, espalda)
+        EJERCICIOS DISPONIBLES EN LA BASE DE DATOS (98+ ejercicios):
+        
+        **PECHO**: Press de Banca, Press Inclinado, Aperturas con Mancuernas, Cruces en Polea, Flexiones, Peck Deck
+        **ESPALDA**: Peso Muerto, Dominadas, Remo con Barra, Remo con Mancuerna, Jalones al Pecho, Face Pulls
+        **HOMBROS**: Press Militar, Elevaciones Laterales, Elevaciones Frontales, Pájaros, Press Arnold
+        **BÍCEPS**: Curl con Barra, Curl con Mancuernas, Curl Martillo, Curl Concentrado
+        **TRÍCEPS**: Press Francés, Fondos en Paralelas, Extensiones en Polea, Patadas de Tríceps  
+        **PIERNAS**: Sentadillas, Prensa de Piernas, Lunges, Peso Muerto Rumano, Curl de Piernas
+        **GLÚTEOS**: Hip Thrust, Puentes de Glúteo, Sentadillas Sumo
+        **CORE**: Plancha, Abdominales, Russian Twists, Elevaciones de Piernas
+        **CARDIO**: Correr, Burpees, Jumping Jacks, Mountain Climbers, Bicicleta Estática
+        
+        IMPORTANTE: Estos son SOLO ALGUNOS ejemplos. La base de datos contiene 98+ ejercicios.
+        Si un usuario menciona un ejercicio que no reconoces de esta lista, USA LA HERRAMIENTA 
+        get_exercises para consultar TODOS los ejercicios disponibles antes de decir que no existe.
         
         ⚠️ IMPORTANTE - CUÁNDO USAR LAS HERRAMIENTAS:
         
@@ -77,8 +79,9 @@ class FitnessAgent(BaseAgent):
         1. ANALIZA la intención del usuario ANTES de usar herramientas
         2. Si es consulta general → Responde directamente SIN herramientas
         3. Si quiere entrenar → Usa get_active_workout primero, luego start_workout si es necesario
-        4. Durante entrenamiento → Usa add_set para registrar series
-        5. Al finalizar → Usa end_workout
+        4. Durante entrenamiento → Usa add_set_simple para registrar series
+        5. Al finalizar → Usa end_active_workout
+        6. Si menciona un ejercicio no reconocido → Usa get_exercises para verificar disponibilidad
         
         Características de tus respuestas:
         - Siempre prioriza la seguridad y la técnica correcta
@@ -94,9 +97,10 @@ class FitnessAgent(BaseAgent):
         - Para consultas generales, responde directamente con tu conocimiento
         - Solo usa herramientas para acciones concretas de entrenamiento
         - Siempre explica qué vas a hacer antes de usar una herramienta
-        - Si el usuario menciona un ejercicio que no está en la base de datos (como "bicep curl"), 
-          sugiere alternativas disponibles (como "Dominadas" para trabajar bíceps)
-        - NUNCA intentes registrar ejercicios que no existen en la lista de ejercicios disponibles
+        - Si el usuario menciona un ejercicio, SIEMPRE verifica primero en la base de datos usando get_exercises
+        - La base de datos contiene 98+ ejercicios de bodybuilding profesionales
+        - Si un ejercicio no existe, sugiere alternativas similares de la base de datos
+        - NUNCA rechaces un ejercicio sin antes verificar con get_exercises
         
         Si el usuario menciona dolor, lesiones o condiciones médicas, recomienda 
         consultar con un profesional de la salud antes de continuar.
