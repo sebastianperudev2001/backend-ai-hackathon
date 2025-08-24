@@ -19,9 +19,37 @@ class NutritionAgent(BaseAgent):
     
     def __init__(self, user_id: Optional[str] = None):
         system_prompt = """
-        Eres un nutricionista virtual especializado en ayudar con dietas y alimentación.
-        Puedes consultar comidas del día, analizar progreso nutricional, buscar alimentos,
-        y dar recomendaciones personalizadas para cumplir objetivos nutricionales.
+        ¡Hola! Soy Luna, tu coach de nutrición en FaiTracker 🌙✨
+        
+        Soy una nutricionista certificada especializada en alimentación saludable y nutrición deportiva.
+        Mi misión es ayudarte a alcanzar tus objetivos a través de una alimentación inteligente y balanceada.
+        
+        🥗 En FaiTracker puedo ayudarte con:
+        - 📊 Consultar tus comidas del día y progreso nutricional
+        - 🔍 Registrar automáticamente lo que comes con análisis de macros
+        - 📈 Analizar tu adherencia al plan y darte recomendaciones personalizadas
+        - 🍎 Buscar alimentos en nuestra extensa base de datos nutricional
+        - 🎯 Ajustar tu plan según tus objetivos (pérdida de peso, ganancia muscular, etc.)
+        
+        💫 Mi enfoque como Luna:
+        - 🎯 Personalizo cada recomendación según tus objetivos específicos
+        - 🔬 Base mis consejos en evidencia científica actualizada
+        - 💝 Soy comprensiva - entiendo que cada persona tiene su ritmo
+        - 🌟 Te motivo sin juzgar, celebrando cada pequeño progreso
+        - 🥗 Hago que la alimentación saludable sea práctica y deliciosa
+        - 📱 Uso la tecnología de FaiTracker para hacer tu seguimiento más fácil
+        
+        🚀 HERRAMIENTAS FAITRACKER que uso para ti:
+        - Registro inteligente de comidas con análisis automático de macros
+        - Consulta de tu plan de dieta personalizado
+        - Análisis de progreso nutricional en tiempo real
+        - Base de datos de alimentos con información nutricional precisa
+        - Recomendaciones personalizadas basadas en tu adherencia
+        
+        ⚠️ IMPORTANTE: Mis recomendaciones complementan, no reemplazan, 
+        la consulta con un profesional de la salud para condiciones específicas.
+        
+        ¡Estoy aquí para hacer tu viaje nutricional más fácil y exitoso! 🌟
         """
         super().__init__(
             name="nutrition_agent",
@@ -163,15 +191,16 @@ class NutritionAgent(BaseAgent):
     def _provide_nutrition_help(self, user: User) -> str:
         """Ayuda general de nutrición"""
         return f"""
-👋 ¡Hola {user.name or 'Usuario'}! Soy tu nutricionista virtual.
+¡Hola! Soy Luna 🌙, tu coach de nutrición en FaiTracker ✨
 
 🥗 **Puedo ayudarte con:**
-• "¿Qué comidas tengo hoy?"
-• "¿Cuál es mi siguiente comida?"
-• "Análisis de mi progreso nutricional"
-• "Buscar alimentos ricos en proteína"
+• "¿Qué comidas tengo hoy?" - Ver tu plan del día
+• "¿Cuál es mi siguiente comida?" - Próxima comida programada
+• "Acabo de comer..." - Registrar comidas automáticamente
+• "¿Cómo voy con mi dieta?" - Análisis de tu progreso
+• "Buscar alimentos" - Consultar nuestra base de datos
 
-💡 **¿En qué te puedo ayudar con tu alimentación?**
+🌟 **¿En qué puedo ayudarte hoy con tu alimentación?**
         """
     
     def _format_diet_plan(self, result: Dict[str, Any]) -> str:
@@ -551,10 +580,10 @@ class NutritionAgent(BaseAgent):
         """Formatear respuesta para WhatsApp después de registrar comida"""
         consumed_meal = result["consumed_meal"]
         
-        response = f"✅ ¡Comida registrada!\n\n"
+        response = f"✅ ¡Perfecto! Registré tu comida en FaiTracker\n\n"
         response += f"🍽️ {consumed_meal['meal_name']}\n"
         response += f"⏰ {meal_type.title()} - {consumed_meal['consumed_at']}\n\n"
-        response += f"📊 Información nutricional:\n"
+        response += f"📊 Análisis nutricional:\n"
         response += f"🔥 {consumed_meal['total_calories']:.0f} calorías\n"
         response += f"🥩 {consumed_meal['total_protein_g']:.1f}g proteína\n"
         response += f"🍞 {consumed_meal['total_carbs_g']:.1f}g carbohidratos\n"
@@ -563,7 +592,7 @@ class NutritionAgent(BaseAgent):
         if consumed_meal.get("satisfaction_rating"):
             response += f"⭐ Satisfacción: {consumed_meal['satisfaction_rating']}/5\n"
         
-        response += f"\n💡 Escribe '¿cómo voy con mi dieta?' para ver tu progreso del día"
+        response += f"\n🌟 Luna dice: ¡Excelente registro! Escribe '¿cómo voy con mi dieta?' para ver tu progreso completo"
         
         return response
     
