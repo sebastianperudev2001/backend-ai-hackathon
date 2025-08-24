@@ -265,7 +265,13 @@ class NutritionAgent(BaseAgent):
             
             # Búsqueda y registro
             "buscar alimento", "buscar comida", "buscar ingrediente",
-            "registrar comida", "anotar comida", "logear", "consumí"
+            "registrar comida", "anotar comida", "logear", "consumí",
+            
+            # Registro de comidas (frases más naturales)
+            "acabo de comer", "comí", "desayuné", "almorcé", "cené",
+            "me comí", "tomé", "bebí", "en mi desayuno", "en mi almuerzo", 
+            "en mi cena", "para desayunar", "para almorzar", "para cenar",
+            "hice mi desayuno", "hice mi almuerzo", "hice mi cena"
         ]
         
         # Palabras que indican consultas generales (NO usar herramientas)
@@ -343,11 +349,91 @@ class NutritionAgent(BaseAgent):
             else:
                 return "¿Qué alimento te gustaría buscar?"
         
+        # Registro de comidas
+        elif any(phrase in message_lower for phrase in [
+            'acabo de comer', 'comí', 'desayuné', 'almorcé', 'cené',
+            'me comí', 'en mi desayuno', 'en mi almuerzo', 'en mi cena',
+            'para desayunar', 'para almorzar', 'para cenar',
+            'hice mi desayuno', 'hice mi almuerzo', 'hice mi cena',
+            'registrar comida', 'anotar comida', 'consumí'
+        ]):
+            logger.info(f"🍽️ Detectado registro de comida para user_id: {user_id}")
+            return await self._process_meal_logging(message, user_id)
+        
         else:
             # Si llegamos aquí, es una consulta específica pero no reconocida
             # Usar la herramienta más apropiada por defecto
             result = await self.nutrition_tools.get_today_meals(user_id)
             return self._format_today_meals(result)
+    
+    async def _process_meal_logging(self, message: str, user_id: str) -> str:
+        """
+        Procesar el registro de una comida consumida
+        
+        Args:
+            message: Mensaje del usuario describiendo la comida
+            user_id: ID del usuario
+            
+        Returns:
+            Respuesta con el resultado del registro
+        """
+        try:
+            # Por ahora, como no tenemos un parser completo de alimentos,
+            # vamos a dar una respuesta que ayude al usuario
+            message_lower = message.lower()
+            
+            # Detectar tipo de comida
+            meal_type = "desayuno"  # default
+            if any(word in message_lower for word in ["desayuno", "desayuné", "en mi desayuno", "para desayunar"]):
+                meal_type = "desayuno"
+            elif any(word in message_lower for word in ["almuerzo", "almorcé", "en mi almuerzo", "para almorzar"]):
+                meal_type = "almuerzo"
+            elif any(word in message_lower for word in ["cena", "cené", "en mi cena", "para cenar"]):
+                meal_type = "cena"
+            elif any(word in message_lower for word in ["colacion", "snack", "merienda"]):
+                meal_type = "colacion_1"
+            
+            # Construir respuesta informativa
+            response = f"🍽️ **Registro de Comida - {meal_type.title()}**\n\n"
+            response += f"📝 **Detección:** He identificado que quieres registrar una comida para tu {meal_type}.\n\n"
+            response += f"💡 **Mensaje recibido:** {message[:100]}...\n\n"
+            
+            # Extraer información básica
+            foods_mentioned = []
+            if "huevo" in message_lower:
+                foods_mentioned.append("huevos")
+            if "pan" in message_lower:
+                foods_mentioned.append("pan")
+            if "leche" in message_lower:
+                foods_mentioned.append("leche")
+            if "fruta" in message_lower:
+                foods_mentioned.append("fruta")
+            
+            if foods_mentioned:
+                response += f"🍎 **Alimentos detectados:** {', '.join(foods_mentioned)}\n\n"
+            
+            response += f"⚙️ **Estado actual del sistema:**\n"
+            response += f"• ✅ Detección de intent: FUNCIONA\n"
+            response += f"• ✅ Routing a herramientas: FUNCIONA\n"
+            response += f"• ❓ Parser de alimentos: PENDIENTE DE IMPLEMENTAR\n"
+            response += f"• ❓ Registro en BD: PENDIENTE DE IMPLEMENTAR\n\n"
+            
+            response += f"🚧 **Para implementar registro completo necesitamos:**\n"
+            response += f"1. Parser inteligente de alimentos y cantidades\n"
+            response += f"2. Mapeo a la base de datos de alimentos\n"
+            response += f"3. Cálculo automático de macronutrientes\n"
+            response += f"4. Inserción en consumed_meals y consumed_meal_ingredients\n\n"
+            
+            response += f"💡 **Mientras tanto, puedes:**\n"
+            response += f"• Usar 'buscar huevos' para ver info nutricional\n"
+            response += f"• Preguntar '¿qué comidas tengo hoy?' para ver tu plan\n"
+            response += f"• Solicitar '¿cómo voy con mi dieta?' para análisis actual\n"
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error procesando registro de comida: {str(e)}")
+            return f"❌ Error procesando el registro de comida: {str(e)}"
     
     async def _process_general_query(self, message: str, user: User, context: Dict[str, Any]) -> str:
         """Procesar consulta general sin herramientas específicas"""
