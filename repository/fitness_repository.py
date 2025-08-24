@@ -574,3 +574,75 @@ class FitnessRepository:
         except Exception as e:
             logger.error(f"❌ Error obteniendo ejercicios: {str(e)}")
             return []
+    
+    async def get_exercise_history(self, phone_number: str, exercise_name: str, weeks_back: int = 4) -> List[Dict[str, Any]]:
+        """
+        Obtener historial de un ejercicio específico para un usuario
+        
+        Args:
+            phone_number: Número de teléfono del usuario
+            exercise_name: Nombre del ejercicio
+            weeks_back: Semanas hacia atrás para analizar
+            
+        Returns:
+            Lista de diccionarios con información de las series del ejercicio
+        """
+        try:
+            if not self.supabase_client.is_connected():
+                return []
+            
+            # Obtener usuario
+            user = await self.get_user_by_phone(phone_number)
+            if not user:
+                return []
+            
+            # Calcular fecha límite
+            from datetime import datetime, timedelta
+            date_limit = datetime.now() - timedelta(weeks=weeks_back)
+            
+            # Obtener series del ejercicio con información de rutinas
+            result = self.supabase_client.client.table("workout_sets").select("""
+                *,
+                workouts (
+                    id,
+                    name,
+                    started_at,
+                    ended_at,
+                    user_id
+                ),
+                exercises (
+                    id,
+                    name
+                )
+            """).eq("workouts.user_id", user.id).gte("created_at", date_limit.isoformat()).execute()
+            
+            if not result.data:
+                return []
+            
+            # Filtrar por nombre de ejercicio y estructurar datos
+            exercise_history = []
+            for set_data in result.data:
+                if (set_data.get("exercises", {}).get("name", "").lower() == 
+                    exercise_name.lower()):
+                    
+                    exercise_history.append({
+                        "workout_id": set_data["workout_id"],
+                        "workout_name": set_data.get("workouts", {}).get("name", ""),
+                        "workout_date": set_data.get("workouts", {}).get("started_at", ""),
+                        "set_number": set_data.get("set_number", 1),
+                        "weight": set_data.get("weight"),
+                        "repetitions": set_data.get("repetitions"),
+                        "duration_seconds": set_data.get("duration_seconds"),
+                        "distance_meters": set_data.get("distance_meters"),
+                        "difficulty_rating": set_data.get("difficulty_rating"),
+                        "notes": set_data.get("notes"),
+                        "created_at": set_data.get("created_at")
+                    })
+            
+            # Ordenar por fecha descendente
+            exercise_history.sort(key=lambda x: x["workout_date"], reverse=True)
+            return exercise_history
+            
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo historial de ejercicio: {str(e)}")
+            return []

@@ -36,6 +36,7 @@ class FitnessAgent(BaseAgent):
         - add_set_simple: Para registrar series usando phone_number (MÁS FÁCIL)
         - end_active_workout: Para finalizar rutinas usando phone_number
         - get_exercises: Para consultar ejercicios disponibles
+        - get_progressive_overload: Para análisis de sobrecarga progresiva y recomendaciones de progreso
         
         🚫 PROHIBIDO SIMULAR HERRAMIENTAS:
         1. NUNCA escribas JSON fake como {{"action": "get_active_workout"}}
@@ -70,6 +71,7 @@ class FitnessAgent(BaseAgent):
         ✅ FINALIZAR entrenamiento ("terminé mi rutina", "acabé de entrenar")
         ✅ CONSULTAR rutina activa específicamente ("¿tengo rutina activa?")
         ✅ VER lista de ejercicios específicamente ("¿qué ejercicios disponibles hay?")
+        ✅ ANALIZAR PROGRESO y SOBRECARGA PROGRESIVA ("¿cómo progreso en sentadillas?", "cuánto peso debo subir en press de banca?", "¿debo aumentar peso o repeticiones?")
         
         NO USES HERRAMIENTAS cuando sea solo conversación/información:
         ❌ Solo menciona un ejercicio sin pedir registro ("hice remo", "terminé mis flexiones")
@@ -317,7 +319,12 @@ class FitnessAgent(BaseAgent):
             "entrenamiento activo",
             
             # Ver ejercicios disponibles
-            "qué ejercicios hay", "muestra ejercicios", "ejercicios disponibles", "lista de ejercicios"
+            "qué ejercicios hay", "muestra ejercicios", "ejercicios disponibles", "lista de ejercicios",
+            
+            # Sobrecarga progresiva
+            "sobrecarga progresiva", "cómo progresar", "aumentar peso", "subir peso", "incrementar peso",
+            "aumentar repeticiones", "subir reps", "cómo mejorar", "progreso en ejercicio",
+            "cuánto peso subir", "debo aumentar", "siguiente nivel", "progresión"
         ]
         
         # Palabras que indican consultas generales (NO usar herramientas)

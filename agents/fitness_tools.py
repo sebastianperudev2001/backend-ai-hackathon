@@ -77,6 +77,13 @@ class AddSetSimpleSchema(BaseModel):
     notes: Optional[str] = Field(default=None, description="Notas adicionales")
 
 
+class GetProgressiveOverloadSchema(BaseModel):
+    """Schema para obtener recomendaciones de sobrecarga progresiva"""
+    phone_number: str = Field(description="Número de teléfono del usuario")
+    exercise_name: str = Field(description="Nombre del ejercicio para analizar (ej: Sentadillas, Press de Banca)")
+    weeks_to_analyze: Optional[int] = Field(default=4, description="Número de semanas hacia atrás para analizar el progreso (por defecto 4)")
+
+
 # ==================== TOOLS ====================
 
 class StartWorkoutTool(BaseTool):
@@ -607,6 +614,244 @@ class AddSetSimpleTool(BaseTool):
             return "❌ Lo siento, no pude registrar la serie en este momento. Por favor, intenta nuevamente."
 
 
+class GetProgressiveOverloadTool(BaseTool):
+    """Tool para obtener recomendaciones de sobrecarga progresiva"""
+    name: str = "get_progressive_overload"
+    description: str = """
+    Analiza el progreso histórico de un ejercicio específico del usuario y proporciona
+    recomendaciones de sobrecarga progresiva (incrementar peso o repeticiones).
+    Utiliza esta herramienta cuando el usuario pregunta sobre cómo progresar en un ejercicio
+    o cómo aplicar sobrecarga progresiva.
+    """
+    args_schema: type = GetProgressiveOverloadSchema
+    
+    def __init__(self):
+        super().__init__()
+    
+    @property
+    def fitness_repo(self):
+        """Lazy loading del repositorio"""
+        if not hasattr(self, '_fitness_repo'):
+            self._fitness_repo = FitnessRepository()
+        return self._fitness_repo
+    
+    def _run(self, phone_number: str, exercise_name: str, weeks_to_analyze: int = 4) -> str:
+        """Ejecutar la herramienta de forma síncrona"""
+        import asyncio
+        return asyncio.run(self._arun(phone_number, exercise_name, weeks_to_analyze))
+    
+    async def _arun(self, phone_number: str, exercise_name: str, weeks_to_analyze: int = 4) -> str:
+        """Analizar progreso y recomendar sobrecarga progresiva"""
+        try:
+            # Obtener historial del ejercicio
+            history = await self.fitness_repo.get_exercise_history(phone_number, exercise_name, weeks_to_analyze)
+            
+            if not history:
+                return f"""
+❌ No se encontró historial para el ejercicio **{exercise_name}** en las últimas {weeks_to_analyze} semanas.
+
+💡 **Para obtener recomendaciones de sobrecarga progresiva:**
+1. Primero registra algunas series de este ejercicio
+2. Realiza el ejercicio consistentemente por al menos 2-3 semanas
+3. Vuelve a consultar para obtener recomendaciones basadas en tu progreso
+
+¿Te gustaría ver los ejercicios disponibles en la base de datos?
+                """.strip()
+            
+            # Analizar el progreso
+            analysis = self._analyze_progression(history, exercise_name)
+            
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"❌ Error en GetProgressiveOverloadTool: {str(e)}")
+            return "❌ Lo siento, no pude analizar tu progreso en este momento. Por favor, intenta nuevamente."
+    
+    def _analyze_progression(self, history: List[Dict], exercise_name: str) -> str:
+        """
+        Analizar progresión histórica y generar recomendaciones
+        
+        Args:
+            history: Lista de datos históricos del ejercicio
+            exercise_name: Nombre del ejercicio
+            
+        Returns:
+            Análisis y recomendaciones formateadas
+        """
+        try:
+            # Extraer datos relevantes
+            weights = [s.get("weight") for s in history if s.get("weight")]
+            reps = [s.get("repetitions") for s in history if s.get("repetitions")]
+            dates = [s.get("workout_date") for s in history if s.get("workout_date")]
+            
+            total_sets = len(history)
+            total_workouts = len(set(s.get("workout_id") for s in history))
+            
+            # Análisis de peso
+            weight_analysis = ""
+            if weights:
+                max_weight = max(weights)
+                min_weight = min(weights)
+                avg_weight = sum(weights) / len(weights)
+                last_weights = weights[:5]  # Últimos 5 registros
+                recent_avg = sum(last_weights) / len(last_weights) if last_weights else 0
+                
+                weight_trend = "estable"
+                if recent_avg > avg_weight * 1.05:
+                    weight_trend = "aumentando"
+                elif recent_avg < avg_weight * 0.95:
+                    weight_trend = "disminuyendo"
+                
+                weight_analysis = f"""
+**📊 Análisis de Peso:**
+• Peso máximo: {max_weight} kg
+• Peso promedio: {avg_weight:.1f} kg
+• Peso promedio reciente: {recent_avg:.1f} kg
+• Tendencia: {weight_trend}"""
+            
+            # Análisis de repeticiones
+            reps_analysis = ""
+            if reps:
+                max_reps = max(reps)
+                min_reps = min(reps)
+                avg_reps = sum(reps) / len(reps)
+                last_reps = reps[:5]  # Últimos 5 registros
+                recent_reps_avg = sum(last_reps) / len(last_reps) if last_reps else 0
+                
+                reps_trend = "estables"
+                if recent_reps_avg > avg_reps * 1.1:
+                    reps_trend = "aumentando"
+                elif recent_reps_avg < avg_reps * 0.9:
+                    reps_trend = "disminuyendo"
+                
+                reps_analysis = f"""
+**🔢 Análisis de Repeticiones:**
+• Repeticiones máximas: {max_reps}
+• Repeticiones promedio: {avg_reps:.1f}
+• Repeticiones promedio recientes: {recent_reps_avg:.1f}
+• Tendencia: {reps_trend}"""
+            
+            # Generar recomendaciones
+            recommendations = self._generate_recommendations(weights, reps, exercise_name)
+            
+            # Construcción del resultado
+            result = f"""
+🎯 **Análisis de Sobrecarga Progresiva para {exercise_name}**
+
+📈 **Resumen del Progreso:**
+• Total de series analizadas: {total_sets}
+• Entrenamientos realizados: {total_workouts}
+• Período analizado: últimas {len(set(d[:10] for d in dates if d))} días únicos
+
+{weight_analysis}
+
+{reps_analysis}
+
+{recommendations}
+
+💡 **Consejos Generales:**
+• Incrementa la carga gradualmente (2.5-5kg o 1-2 reps)
+• Mantén la técnica correcta siempre
+• Asegúrate de descansar adecuadamente entre entrenamientos
+• Escucha a tu cuerpo y no fuerces el progreso
+            """.strip()
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error analizando progresión: {str(e)}")
+            return f"❌ Error analizando el progreso de {exercise_name}. Por favor, intenta nuevamente."
+    
+    def _generate_recommendations(self, weights: List[float], reps: List[int], exercise_name: str) -> str:
+        """
+        Generar recomendaciones específicas de sobrecarga progresiva
+        
+        Args:
+            weights: Lista de pesos utilizados
+            reps: Lista de repeticiones realizadas
+            exercise_name: Nombre del ejercicio
+            
+        Returns:
+            Recomendaciones formateadas
+        """
+        recommendations = "🚀 **Recomendaciones de Sobrecarga Progresiva:**\n\n"
+        
+        # Determinar si es ejercicio de fuerza o cardio
+        is_strength_exercise = any(w for w in weights if w and w > 0)
+        is_cardio_exercise = "correr" in exercise_name.lower() or "cardio" in exercise_name.lower() or "burpees" in exercise_name.lower()
+        
+        if is_strength_exercise and weights:
+            # Análisis para ejercicios de fuerza
+            recent_weights = weights[:3]  # Últimos 3 pesos
+            max_weight = max(weights)
+            recent_max = max(recent_weights) if recent_weights else 0
+            
+            if recent_max >= max_weight:
+                # Usuario está en su máximo, recomendar incremento de peso
+                increment = 2.5 if max_weight < 50 else 5
+                recommendations += f"""
+✅ **Incrementar Peso (Recomendado)**
+• Intenta aumentar {increment} kg en tu próxima sesión
+• Mantén las repeticiones en el rango actual ({min(reps) if reps else 8}-{max(reps) if reps else 12})
+• Si puedes completar todas las series con buena técnica, ¡es hora de subir el peso!
+
+📋 **Plan sugerido:**
+1. Aumenta a {recent_max + increment} kg
+2. Reduce repeticiones a {max(6, (max(reps) if reps else 10) - 2)} si es necesario
+3. Una vez que domines este peso, vuelve al rango de repeticiones anterior
+                """
+            else:
+                # Usuario no está en su máximo, trabajar con repeticiones
+                target_reps = (max(reps) if reps else 12) + 2
+                recommendations += f"""
+✅ **Incrementar Repeticiones (Recomendado)**
+• Mantén el peso actual ({recent_max} kg)
+• Intenta llegar a {target_reps} repeticiones
+• Una vez que puedas hacer {target_reps} reps fácilmente, sube el peso
+
+📋 **Plan sugerido:**
+1. Peso actual: {recent_max} kg
+2. Meta: {target_reps} repeticiones por serie
+3. Cuando logres {target_reps} reps, sube a {recent_max + 2.5} kg
+                """
+        elif reps:
+            # Ejercicios sin peso o de cardio
+            max_reps = max(reps)
+            recent_reps = reps[:3]
+            recent_max_reps = max(recent_reps) if recent_reps else 0
+            
+            if recent_max_reps >= max_reps:
+                recommendations += f"""
+✅ **Incrementar Repeticiones (Recomendado)**
+• Intenta hacer {max_reps + 3} repeticiones en tu próxima serie
+• Mantén la calidad del movimiento
+• Si es muy fácil, considera agregar peso o hacer una variación más difícil
+
+📋 **Plan sugerido:**
+1. Meta inmediata: {max_reps + 3} repeticiones
+2. Meta a 2 semanas: {max_reps + 6} repeticiones
+3. Considera progresiones: variaciones más difíciles del ejercicio
+                """
+            else:
+                recommendations += f"""
+✅ **Consolidar Repeticiones Actuales**
+• Enfócate en alcanzar consistentemente {max_reps} repeticiones
+• Mejora la técnica y el control del movimiento
+• Una vez que sea fácil, incrementa a {max_reps + 5} repeticiones
+                """
+        else:
+            # Sin datos suficientes
+            recommendations += f"""
+💡 **Recomendaciones Generales para {exercise_name}:**
+• Registra más datos para obtener recomendaciones específicas
+• Principio básico: incrementa peso 2.5-5kg OR repeticiones +1-3
+• Nunca sacrifiques la técnica por el progreso
+• Progresa gradualmente para evitar lesiones
+            """
+        
+        return recommendations
+
+
 def get_fitness_tools() -> List[BaseTool]:
     """
     Obtener todas las herramientas de fitness
@@ -618,6 +863,7 @@ def get_fitness_tools() -> List[BaseTool]:
         AddSetTool(),
         AddSetSimpleTool(),  # Nueva herramienta simplificada
         GetActiveWorkoutTool(),
-        GetExercisesTool()
+        GetExercisesTool(),
+        GetProgressiveOverloadTool()  # Herramienta de sobrecarga progresiva
     ]
 
