@@ -28,7 +28,7 @@ class FitnessAgent(BaseAgent):
         3. Planes de entrenamiento progresivos
         4. Consejos de recuperación y prevención de lesiones
         5. Motivación y seguimiento del progreso
-        6. **REGISTRO Y SEGUIMIENTO DE RUTINAS EN TIEMPO REAL**
+        6. **REGISTRO Y SEGUIMIENTO DE RUTINAS EN TIEMPO REAL (solo cuando sea necesario)**
         
         HERRAMIENTAS DISPONIBLES:
         - start_workout: Para iniciar una nueva rutina de ejercicio
@@ -37,11 +37,28 @@ class FitnessAgent(BaseAgent):
         - get_active_workout: Para verificar si hay una rutina en progreso
         - get_exercises: Para consultar ejercicios disponibles
         
-        FLUJO DE TRABAJO RECOMENDADO:
-        1. Cuando el usuario quiera entrenar, usa get_active_workout para verificar rutinas activas
-        2. Si no hay rutina activa, usa start_workout para iniciar una nueva
-        3. Durante el entrenamiento, usa add_set para registrar cada serie completada
-        4. Al finalizar, usa end_workout para cerrar la rutina y mostrar resumen
+        ⚠️ IMPORTANTE - CUÁNDO USAR LAS HERRAMIENTAS:
+        
+        USA HERRAMIENTAS SOLO cuando el usuario:
+        ✅ Quiera INICIAR una rutina ("empezar a entrenar", "comenzar rutina", "iniciar workout")
+        ✅ Quiera TERMINAR una rutina ("terminar", "finalizar", "acabé de entrenar")
+        ✅ Quiera REGISTRAR una serie ("hice 10 flexiones", "completé una serie", "registra mi serie")
+        ✅ Pregunte por su rutina ACTIVA ("¿tengo rutina activa?", "¿qué rutina estoy haciendo?")
+        ✅ Pida ver ejercicios DISPONIBLES ("¿qué ejercicios hay?", "muestra ejercicios")
+        
+        NO USES HERRAMIENTAS cuando el usuario:
+        ❌ Haga preguntas generales sobre fitness ("¿cómo hacer flexiones?", "consejos de nutrición")
+        ❌ Pida rutinas teóricas ("crea una rutina para principiantes")
+        ❌ Pregunte sobre técnica ("¿cómo se hace una sentadilla?")
+        ❌ Busque información general ("beneficios del cardio", "¿cuánto entrenar?")
+        ❌ Pida consejos ("¿qué comer antes de entrenar?")
+        
+        FLUJO DE TRABAJO:
+        1. ANALIZA la intención del usuario ANTES de usar herramientas
+        2. Si es consulta general → Responde directamente SIN herramientas
+        3. Si quiere entrenar → Usa get_active_workout primero, luego start_workout si es necesario
+        4. Durante entrenamiento → Usa add_set para registrar series
+        5. Al finalizar → Usa end_workout
         
         Características de tus respuestas:
         - Siempre prioriza la seguridad y la técnica correcta
@@ -50,13 +67,13 @@ class FitnessAgent(BaseAgent):
         - Usa emojis relevantes para hacer el contenido más visual (💪🏋️🔥)
         - Proporciona alternativas para ejercicios que requieran equipo especial
         - Sé motivador pero realista con las expectativas
-        - **USA LAS HERRAMIENTAS para registrar el progreso del usuario automáticamente**
+        - **USA LAS HERRAMIENTAS SOLO cuando sea necesario para acciones específicas**
         
         IMPORTANTE: 
-        - Siempre usa las herramientas disponibles para registrar rutinas y series
         - El phone_number es el número de WhatsApp del usuario (ej: +51998555878)
-        - Registra cada serie inmediatamente después de que el usuario la complete
-        - Proporciona feedback motivador después de cada serie registrada
+        - Para consultas generales, responde directamente con tu conocimiento
+        - Solo usa herramientas para acciones concretas de entrenamiento
+        - Siempre explica qué vas a hacer antes de usar una herramienta
         
         Si el usuario menciona dolor, lesiones o condiciones médicas, recomienda 
         consultar con un profesional de la salud antes de continuar.
@@ -229,6 +246,73 @@ class FitnessAgent(BaseAgent):
             logger.error(f"❌ Error configurando agent executor: {str(e)}")
             self.agent_executor = None
     
+    def _detect_tool_intent(self, input_text: str) -> bool:
+        """
+        Detectar si el usuario tiene intención de usar herramientas específicas
+        
+        Args:
+            input_text: Texto de entrada del usuario
+            
+        Returns:
+            True si debe usar herramientas, False si es consulta general
+        """
+        input_lower = input_text.lower()
+        
+        # Palabras clave que indican uso de herramientas
+        tool_keywords = [
+            # Iniciar rutina
+            "empezar a entrenar", "comenzar rutina", "iniciar workout", "empezar entrenamiento",
+            "quiero entrenar", "vamos a entrenar", "inicio rutina", "comenzar a ejercitarme",
+            
+            # Terminar rutina
+            "terminar rutina", "finalizar rutina", "finalizar entrenamiento", "acabé de entrenar", "terminé",
+            "finalizar workout", "cerrar rutina",
+            
+            # Registrar series
+            "hice", "completé", "registra", "anotar serie", "terminé serie", "acabé serie",
+            "registrar ejercicio", "anotar ejercicio",
+            
+            # Consultar rutina activa
+            "rutina activa", "qué rutina estoy haciendo", "tengo rutina", "rutina en progreso",
+            "entrenamiento activo",
+            
+            # Ver ejercicios disponibles
+            "qué ejercicios hay", "muestra ejercicios", "ejercicios disponibles", "lista de ejercicios"
+        ]
+        
+        # Palabras que indican consultas generales (NO usar herramientas)
+        general_keywords = [
+            "cómo hacer", "cómo se hace", "técnica de", "forma correcta", "consejos",
+            "beneficios", "qué es", "para qué sirve", "cuánto", "cuándo", "dónde",
+            "rutina para", "plan de", "programa de", "ejercicios para", "crea una rutina",
+            "diseña una rutina", "recomienda ejercicios", "qué comer", "nutrición",
+            "dieta", "alimentación", "suplementos", "descanso", "recuperación"
+        ]
+        
+        # Verificar palabras de consulta general primero (tienen prioridad)
+        for keyword in general_keywords:
+            if keyword in input_lower:
+                return False
+        
+        # Verificar palabras de herramientas
+        for keyword in tool_keywords:
+            if keyword in input_lower:
+                return True
+        
+        # Si no encuentra palabras clave específicas, analizar contexto
+        # Frases que sugieren acción inmediata (usar herramientas)
+        action_phrases = ["voy a", "quiero", "necesito", "puedes", "ayúdame a"]
+        action_verbs = ["empezar", "comenzar", "iniciar", "terminar", "finalizar", "registrar", "anotar"]
+        
+        for phrase in action_phrases:
+            if phrase in input_lower:
+                for verb in action_verbs:
+                    if verb in input_lower:
+                        return True
+        
+        # Por defecto, para consultas ambiguas, no usar herramientas
+        return False
+    
     async def process_with_tools(self, input_text: str, phone_number: str, context: Optional[Dict[str, Any]] = None) -> str:
         """
         Procesar entrada usando herramientas (método principal para fitness)
@@ -242,9 +326,22 @@ class FitnessAgent(BaseAgent):
             Respuesta generada por el agente con herramientas
         """
         try:
-            if not self.agent_executor:
-                logger.warning("⚠️ Agent executor no disponible, usando método base")
+            # Detectar si necesita usar herramientas
+            should_use_tools = self._detect_tool_intent(input_text)
+            
+            logger.info(f"🔍 Intención detectada - Usar herramientas: {should_use_tools}")
+            
+            # Si no necesita herramientas o no están disponibles, usar método base
+            if not should_use_tools or not self.agent_executor:
+                if not should_use_tools:
+                    logger.info("💬 Procesando como consulta general sin herramientas")
+                else:
+                    logger.warning("⚠️ Agent executor no disponible, usando método base")
+                
                 return await super().process(input_text, context)
+            
+            # Usar herramientas para acciones específicas
+            logger.info("🔧 Procesando con herramientas disponibles")
             
             # Preparar input con contexto de usuario
             full_input = f"Número de teléfono: {phone_number}\n\n{input_text}"

@@ -143,6 +143,11 @@ class WhatsAppService:
         # Lógica de negocio: Analizar el texto y responder
         response_text = await self._generate_text_response(text)
         
+        # Validar respuesta antes de enviar
+        if not self._validate_message_for_whatsapp(response_text):
+            logger.error(f"❌ Respuesta inválida para WhatsApp: {type(response_text)} - {repr(response_text[:100])}")
+            response_text = "Lo siento, ocurrió un error al generar la respuesta. Por favor, intenta nuevamente."
+        
         # Enviar respuesta
         result = await self.whatsapp_repo.send_text_message(sender, response_text)
         
@@ -153,6 +158,74 @@ class WhatsAppService:
             error=result.get("error")
         )
     
+    def _sanitize_response_for_whatsapp(self, response: str) -> str:
+        """
+        Sanitizar respuesta para asegurar compatibilidad con WhatsApp API
+        
+        Args:
+            response: Respuesta cruda del agente
+            
+        Returns:
+            Respuesta sanitizada y válida para WhatsApp
+        """
+        if not response:
+            return "Lo siento, no pude generar una respuesta. Por favor, intenta nuevamente."
+        
+        # Asegurar que es un string
+        if not isinstance(response, str):
+            logger.warning(f"⚠️ Respuesta no es string: {type(response)}")
+            response = str(response)
+        
+        # Limpiar caracteres problemáticos
+        response = response.strip()
+        
+        # Limitar longitud (WhatsApp tiene límites)
+        max_length = 4096  # Límite de WhatsApp para mensajes de texto
+        if len(response) > max_length:
+            logger.warning(f"⚠️ Respuesta muy larga ({len(response)} chars), truncando...")
+            response = response[:max_length-50] + "\n\n... (mensaje truncado)"
+        
+        # Asegurar que no esté vacío después de limpiar
+        if not response.strip():
+            return "Lo siento, no pude generar una respuesta válida. Por favor, intenta nuevamente."
+        
+        return response
+
+    def _validate_message_for_whatsapp(self, message: str) -> bool:
+        """
+        Validar que el mensaje sea válido para WhatsApp API
+        
+        Args:
+            message: Mensaje a validar
+            
+        Returns:
+            True si es válido, False si no
+        """
+        # Verificar que sea string
+        if not isinstance(message, str):
+            logger.warning(f"⚠️ Mensaje no es string: {type(message)}")
+            return False
+        
+        # Verificar que no esté vacío
+        if not message.strip():
+            logger.warning("⚠️ Mensaje vacío")
+            return False
+        
+        # Verificar longitud
+        if len(message) > 4096:
+            logger.warning(f"⚠️ Mensaje muy largo: {len(message)} caracteres")
+            return False
+        
+        # Verificar caracteres problemáticos (opcional)
+        # WhatsApp generalmente maneja bien UTF-8, pero podemos ser cautelosos
+        try:
+            message.encode('utf-8')
+        except UnicodeEncodeError:
+            logger.warning("⚠️ Mensaje contiene caracteres no válidos")
+            return False
+        
+        return True
+
     async def _generate_text_response(self, text: str) -> str:
         """
         Generar respuesta basada en el texto recibido
@@ -162,7 +235,7 @@ class WhatsAppService:
             text: Texto del usuario
             
         Returns:
-            Texto de respuesta
+            Texto de respuesta sanitizado para WhatsApp
         """
         # Si el sistema multi-agente está disponible, úsalo
         if self.coordinator:
@@ -176,13 +249,18 @@ class WhatsAppService:
                 }
                 
                 # Procesar con el coordinador de agentes
-                response = await self.coordinator.process_message(
+                raw_response = await self.coordinator.process_message(
                     user_input=text,
                     context=context
                 )
                 
                 logger.info("✅ Respuesta generada por sistema multi-agente")
-                return response
+                
+                # Sanitizar respuesta antes de enviar
+                sanitized_response = self._sanitize_response_for_whatsapp(raw_response)
+                logger.info(f"🧹 Respuesta sanitizada: {len(sanitized_response)} caracteres")
+                
+                return sanitized_response
                 
             except Exception as e:
                 logger.error(f"❌ Error en sistema multi-agente: {str(e)}")

@@ -46,6 +46,10 @@ class WhatsAppRepository:
         }
         
         try:
+            # Log del payload para debugging
+            logger.info(f"📤 Enviando mensaje a {to}: {len(message)} caracteres")
+            logger.debug(f"📋 Payload: {payload}")
+            
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     self.base_url,
@@ -54,7 +58,17 @@ class WhatsAppRepository:
                     timeout=self.settings.HTTP_TIMEOUT
                 )
                 
-                response_data = response.json()
+                # Intentar parsear respuesta
+                try:
+                    response_data = response.json()
+                except Exception as json_error:
+                    logger.error(f"❌ Error parseando respuesta JSON: {json_error}")
+                    logger.error(f"📄 Respuesta cruda: {response.text}")
+                    return {
+                        "success": False,
+                        "error": f"Error parseando respuesta: {response.text[:200]}",
+                        "status_code": response.status_code
+                    }
                 
                 if response.status_code == 200:
                     logger.info(f"✅ Mensaje enviado exitosamente a {to}")
@@ -64,10 +78,20 @@ class WhatsAppRepository:
                         "data": response_data
                     }
                 else:
-                    logger.error(f"❌ Error de API: {response.status_code} - {response_data}")
+                    # Log detallado del error
+                    error_details = response_data.get("error", {})
+                    error_message = error_details.get("message", "Error desconocido")
+                    error_code = error_details.get("code", "unknown")
+                    
+                    logger.error(f"❌ Error de API WhatsApp:")
+                    logger.error(f"   Status: {response.status_code}")
+                    logger.error(f"   Code: {error_code}")
+                    logger.error(f"   Message: {error_message}")
+                    logger.error(f"   Full response: {response_data}")
+                    
                     return {
                         "success": False,
-                        "error": response_data.get("error", {}).get("message", "Error desconocido"),
+                        "error": f"WhatsApp API Error ({error_code}): {error_message}",
                         "status_code": response.status_code,
                         "data": response_data
                     }
