@@ -44,7 +44,8 @@ class CoordinatorAgent:
             logger.info(f"✅ Modelo Claude supervisor inicializado: {self.settings.CLAUDE_MODEL}")
         except Exception as e:
             logger.error(f"❌ Error inicializando modelo Claude: {str(e)}")
-            raise RuntimeError(f"No se pudo inicializar el modelo Claude: {str(e)}")
+            logger.warning("⚠️ Continuando sin Claude - usando detección simple de agentes")
+            self.supervisor_llm = None
         
         # Los agentes se inicializarán dinámicamente con el user_id
         self.agents = {}
@@ -267,21 +268,20 @@ class CoordinatorAgent:
         
         # Invocar al supervisor para decidir el siguiente agente
         try:
-            chain = supervisor_prompt | self.supervisor_llm 
-            result = chain.invoke({"input": last_message.content})
-            # Extraer la decisión
-            next_agent = result.content.strip()
+            # Si Claude está disponible, usarlo
+            if self.supervisor_llm:
+                chain = supervisor_prompt | self.supervisor_llm 
+                result = chain.invoke({"input": last_message.content})
+                next_agent = result.content.strip()
+            else:
+                # Fallback: usar detección simple sin Claude
+                next_agent = self._simple_agent_detection(last_message.content)
+            
             # Validar la respuesta
             valid_agents = ["fitness_agent", "nutrition_agent", "FINISH"]
             if next_agent not in valid_agents:
                 # Si hay palabras clave, intentar inferir
-                content_lower = last_message.content.lower()
-                if any(word in content_lower for word in ["ejercicio", "rutina", "entrenar", "fitness", "gym"]):
-                    next_agent = "fitness_agent"
-                elif any(word in content_lower for word in ["comida", "dieta", "nutrición", "calorías", "alimentación"]):
-                    next_agent = "nutrition_agent"
-                else:
-                    next_agent = "fitness_agent"  # Default
+                next_agent = self._simple_agent_detection(last_message.content)
             
             logger.info(f"🎯 Supervisor decidió: {next_agent}")
             
@@ -290,8 +290,56 @@ class CoordinatorAgent:
         
         except Exception as e:
             logger.error(f"❌ Error en supervisor: {str(e)}")
-            state["next_agent"] = "FINISH"
+            # Fallback: usar detección simple
+            next_agent = self._simple_agent_detection(last_message.content)
+            state["next_agent"] = next_agent
             return state
+    
+    def _simple_agent_detection(self, message_content: str) -> str:
+        """
+        Detección simple de agente sin Claude API
+        
+        Args:
+            message_content: Contenido del mensaje del usuario
+            
+        Returns:
+            Nombre del agente a usar
+        """
+        content_lower = message_content.lower()
+        
+        # Palabras clave para nutrición
+        nutrition_keywords = [
+            'comida', 'comidas', 'desayuno', 'almuerzo', 'cena', 'dieta', 'nutrición',
+            'calorias', 'calorías', 'macros', 'proteinas', 'proteínas', 'alimentación',
+            'siguiente comida', 'que como', 'qué como', 'plan de hoy', 'deficit',
+            'alimento', 'alimentos', 'buscar', 'ingrediente', 'registrar'
+        ]
+        
+        # Palabras clave para fitness
+        fitness_keywords = [
+            'ejercicio', 'ejercicios', 'rutina', 'entrenar', 'entrenamiento', 'fitness',
+            'gym', 'gimnasio', 'músculo', 'fuerza', 'cardio', 'flexiones', 'sentadillas',
+            'peso', 'series', 'repeticiones', 'workout', 'plan de entrenamiento'
+        ]
+        
+        # Contar coincidencias
+        nutrition_matches = sum(1 for keyword in nutrition_keywords if keyword in content_lower)
+        fitness_matches = sum(1 for keyword in fitness_keywords if keyword in content_lower)
+        
+        # Decidir basado en coincidencias
+        if nutrition_matches > fitness_matches:
+            return "nutrition_agent"
+        elif fitness_matches > nutrition_matches:
+            return "fitness_agent"
+        else:
+            # En caso de empate, usar longitud de coincidencias más específicas
+            if any(phrase in content_lower for phrase in ["que como", "qué como", "comidas de hoy", "siguiente comida"]):
+                return "nutrition_agent"
+            elif any(phrase in content_lower for phrase in ["rutina", "entrenar", "ejercicio"]):
+                return "fitness_agent"
+            else:
+                # Default: fitness (comportamiento original)
+                return "fitness_agent"
         
     
     async def _fitness_agent_node(self, state: GraphState) -> GraphState:
