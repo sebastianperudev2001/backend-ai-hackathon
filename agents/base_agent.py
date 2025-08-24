@@ -8,7 +8,9 @@ from langchain.agents import AgentExecutor
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import BaseMessage, HumanMessage, SystemMessage, AIMessage
 from config.settings import get_settings
+from config.memory_config import create_optimized_memory, MemoryConfig
 from agents.basic_memory import BasicPersistentMemory
+from agents.optimized_memory import OptimizedMemory, UltraCompactMemory
 
 logger = logging.getLogger(__name__)
 
@@ -45,23 +47,38 @@ class BaseAgent:
             # Crear un LLM mock para pruebas
             self.llm = None
         
-        # Memoria del agente - usar memoria persistente si se proporciona user_id
+        # Memoria del agente - usar memoria optimizada configurada para ahorrar tokens
         if user_id:
             try:
-                self.memory = BasicPersistentMemory(
+                # Crear memoria optimizada según configuración de entorno
+                self.memory = create_optimized_memory(
                     user_id=user_id,
-                    memory_key="chat_history",
-                    return_messages=True
+                    memory_key="chat_history"
                 )
-                logger.info(f"✅ Memoria persistente inicializada para usuario: {user_id}")
+                
+                mode = MemoryConfig.get_memory_mode()
+                settings = MemoryConfig.get_memory_settings(mode)
+                logger.info(f"✅ Memoria optimizada inicializada para usuario: {user_id}")
+                logger.info(f"🎛️ Modo: {mode.value} - {settings['description']}")
+                
             except Exception as e:
-                logger.error(f"❌ Error inicializando memoria persistente: {str(e)}")
-                # Fallback a memoria en memoria
-                self.memory = ConversationBufferMemory(
-                    memory_key="chat_history",
-                    return_messages=True
-                )
-                logger.info("⚠️ Usando memoria en memoria como fallback")
+                logger.error(f"❌ Error inicializando memoria optimizada: {str(e)}")
+                # Fallback a memoria básica
+                try:
+                    self.memory = BasicPersistentMemory(
+                        user_id=user_id,
+                        memory_key="chat_history",
+                        return_messages=True
+                    )
+                    logger.info("⚠️ Usando memoria básica como fallback")
+                except Exception as e2:
+                    logger.error(f"❌ Error con memoria básica: {str(e2)}")
+                    # Último fallback a memoria en memoria
+                    self.memory = ConversationBufferMemory(
+                        memory_key="chat_history",
+                        return_messages=True
+                    )
+                    logger.info("⚠️ Usando memoria en memoria como último fallback")
         else:
             # Memoria en memoria por defecto
             self.memory = ConversationBufferMemory(
@@ -87,20 +104,37 @@ class BaseAgent:
             if self.llm is None:
                 return f"Hola! Soy tu asistente de {self.name.lower()}. He recibido tu mensaje: '{input_text}'. En este momento estoy en modo limitado, pero puedo ayudarte con información básica."
             
+            # Cargar memoria optimizada
+            memory_variables = self.memory.load_memory_variables({})
+            chat_history = memory_variables.get("chat_history", "")
+            
             messages = [
                 SystemMessage(content=self.system_prompt),
-                HumanMessage(content=input_text)
             ]
             
-            # Agregar contexto si existe
+            # Agregar historial compacto si existe
+            if chat_history:
+                messages.append(SystemMessage(content=f"Contexto: {chat_history}"))
+            
+            # Agregar contexto adicional si existe (también compacto)
             if context:
                 context_str = self._format_context(context)
-                messages.insert(1, SystemMessage(content=f"Contexto adicional: {context_str}"))
+                # Limitar contexto adicional también
+                if len(context_str) > 300:
+                    context_str = context_str[:300] + "..."
+                messages.append(SystemMessage(content=f"Info: {context_str}"))
+            
+            # Mensaje del usuario
+            messages.append(HumanMessage(content=input_text))
+            
+            # Log del tamaño total del prompt para monitoreo
+            total_chars = sum(len(msg.content) for msg in messages)
+            logger.info(f"📊 Prompt total: {total_chars} caracteres, {len(messages)} mensajes")
             
             # Generar respuesta
             response = await self.llm.ainvoke(messages)
             
-            # Guardar en memoria
+            # Guardar en memoria optimizada
             self.memory.save_context(
                 {"input": input_text},
                 {"output": response.content}
