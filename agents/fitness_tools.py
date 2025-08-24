@@ -36,7 +36,8 @@ class EndWorkoutSchema(BaseModel):
 
 class AddSetSchema(BaseModel):
     """Schema para agregar serie"""
-    workout_id: str = Field(description="ID de la rutina")
+    workout_id: Optional[str] = Field(default=None, description="ID de la rutina (opcional si se proporciona phone_number)")
+    phone_number: Optional[str] = Field(default=None, description="Número de teléfono del usuario para obtener rutina activa")
     exercise_name: str = Field(description="Nombre del ejercicio")
     set_number: int = Field(description="Número de serie")
     weight: Optional[float] = Field(default=None, description="Peso utilizado")
@@ -66,15 +67,26 @@ class EndActiveWorkoutSchema(BaseModel):
     notes: Optional[str] = Field(default=None, description="Notas finales de la rutina")
 
 
+class AddSetSimpleSchema(BaseModel):
+    """Schema simplificado para agregar serie usando phone_number"""
+    phone_number: str = Field(description="Número de teléfono del usuario")
+    exercise: str = Field(description="Nombre del ejercicio (ej: Sentadillas, Flexiones)")
+    reps: Optional[int] = Field(default=None, description="Número de repeticiones")
+    weight: Optional[float] = Field(default=None, description="Peso utilizado en kg")
+    sets: Optional[int] = Field(default=1, description="Número de serie (por defecto 1)")
+    notes: Optional[str] = Field(default=None, description="Notas adicionales")
+
+
 # ==================== TOOLS ====================
 
 class StartWorkoutTool(BaseTool):
     """Tool para iniciar una rutina de ejercicio"""
     name: str = "start_workout"
     description: str = """
-    Inicia una nueva rutina de ejercicio para un usuario.
+    Inicia una nueva rutina de ejercicio para un usuario usando su número de teléfono.
     Registra el momento de inicio y crea un registro en la base de datos.
-    Usa esta herramienta cuando el usuario quiera comenzar una sesión de entrenamiento.
+    Úsala cuando el usuario quiera comenzar una sesión de entrenamiento.
+    Parámetros: phone_number, name (nombre de la rutina), description (opcional)
     """
     args_schema: type = StartWorkoutSchema
     
@@ -242,7 +254,8 @@ class AddSetTool(BaseTool):
             self._fitness_repo = FitnessRepository()
         return self._fitness_repo
     
-    def _run(self, workout_id: str, exercise_name: str, set_number: int, 
+    def _run(self, workout_id: Optional[str] = None, phone_number: Optional[str] = None,
+             exercise_name: str = None, set_number: int = 1, 
              weight: Optional[float] = None, weight_unit: str = "kg",
              repetitions: Optional[int] = None, duration_seconds: Optional[int] = None,
              distance_meters: Optional[float] = None, rest_seconds: Optional[int] = None,
@@ -250,18 +263,34 @@ class AddSetTool(BaseTool):
         """Ejecutar la herramienta de forma síncrona"""
         import asyncio
         return asyncio.run(self._arun(
-            workout_id, exercise_name, set_number, weight, weight_unit,
+            workout_id, phone_number, exercise_name, set_number, weight, weight_unit,
             repetitions, duration_seconds, distance_meters, rest_seconds,
             difficulty_rating, notes
         ))
     
-    async def _arun(self, workout_id: str, exercise_name: str, set_number: int,
+    async def _arun(self, workout_id: Optional[str] = None, phone_number: Optional[str] = None,
+                    exercise_name: str = None, set_number: int = 1,
                     weight: Optional[float] = None, weight_unit: str = "kg",
                     repetitions: Optional[int] = None, duration_seconds: Optional[int] = None,
                     distance_meters: Optional[float] = None, rest_seconds: Optional[int] = None,
                     difficulty_rating: Optional[int] = None, notes: Optional[str] = None) -> str:
         """Agregar serie a la rutina"""
         try:
+            # Si no se proporciona workout_id, buscar la rutina activa
+            if not workout_id and phone_number:
+                active_workout = await self.fitness_repo.get_active_workout(phone_number)
+                if active_workout:
+                    workout_id = active_workout.id
+                    logger.info(f"✅ Rutina activa encontrada para agregar serie: {workout_id}")
+                else:
+                    return "❌ No hay rutinas activas. Por favor, inicia una rutina primero usando start_workout."
+            
+            if not workout_id:
+                return "❌ No se pudo identificar la rutina. Proporciona el workout_id o phone_number."
+            
+            if not exercise_name:
+                return "❌ Debes especificar el nombre del ejercicio."
+            
             # Validar unidad de peso
             try:
                 weight_unit_enum = WeightUnit(weight_unit.lower())
@@ -300,8 +329,10 @@ class GetActiveWorkoutTool(BaseTool):
     """Tool para obtener la rutina activa del usuario"""
     name: str = "get_active_workout"
     description: str = """
-    Obtiene la rutina de ejercicio activa (no finalizada) del usuario.
-    Útil para verificar si hay una rutina en progreso antes de iniciar una nueva.
+    Obtiene la rutina de ejercicio activa (no finalizada) del usuario usando su número de teléfono.
+    ÚSALA SIEMPRE antes de agregar series para verificar que hay una rutina activa.
+    Muestra detalles como nombre, ID, duración, series registradas, etc.
+    Parámetros: phone_number (ej: "+51998555878")
     """
     args_schema: type = GetActiveWorkoutSchema
     
@@ -505,6 +536,77 @@ class EndActiveWorkoutTool(BaseTool):
             return "❌ Lo siento, no pude finalizar la rutina en este momento. Por favor, intenta nuevamente."
 
 
+class AddSetSimpleTool(BaseTool):
+    """Tool simplificada para agregar series usando phone_number"""
+    name: str = "add_set_simple"
+    description: str = """
+    Registra una serie de ejercicio en la rutina activa del usuario.
+    Solo necesitas el número de teléfono, nombre del ejercicio y detalles básicos.
+    Automáticamente encuentra la rutina activa del usuario.
+    """
+    args_schema: type = AddSetSimpleSchema
+    
+    def __init__(self):
+        super().__init__()
+    
+    @property
+    def fitness_repo(self):
+        """Lazy loading del repositorio"""
+        if not hasattr(self, '_fitness_repo'):
+            self._fitness_repo = FitnessRepository()
+        return self._fitness_repo
+    
+    def _run(self, phone_number: str, exercise: str, reps: Optional[int] = None,
+             weight: Optional[float] = None, sets: int = 1, notes: Optional[str] = None) -> str:
+        """Ejecutar la herramienta de forma síncrona"""
+        import asyncio
+        return asyncio.run(self._arun(phone_number, exercise, reps, weight, sets, notes))
+    
+    async def _arun(self, phone_number: str, exercise: str, reps: Optional[int] = None,
+                    weight: Optional[float] = None, sets: int = 1, notes: Optional[str] = None) -> str:
+        """Agregar serie a la rutina activa"""
+        try:
+            # Buscar rutina activa
+            active_workout = await self.fitness_repo.get_active_workout(phone_number)
+            
+            if not active_workout:
+                return "❌ No hay rutinas activas. Por favor, inicia una rutina primero con start_workout."
+            
+            # Preparar request para agregar serie
+            request = AddSetRequest(
+                workout_id=active_workout.id,
+                exercise_name=exercise,
+                set_number=sets,
+                weight=weight,
+                weight_unit=WeightUnit.KG,
+                repetitions=reps,
+                notes=notes
+            )
+            
+            response = await self.fitness_repo.add_set(request)
+            
+            if response.success:
+                set_info = f"""
+✅ ¡Serie registrada exitosamente!
+
+🏋️ **Ejercicio:** {exercise}
+📊 **Serie:** #{sets}
+{f"⚖️ **Peso:** {weight} kg" if weight else ""}
+{f"🔢 **Repeticiones:** {reps}" if reps else ""}
+{f"📝 **Notas:** {notes}" if notes else ""}
+🆔 **Rutina:** {active_workout.name}
+
+¡Sigue así! 💪 ¿Vas a hacer otra serie?
+                """
+                return set_info.strip()
+            else:
+                return f"❌ Error al registrar la serie: {response.message}"
+                
+        except Exception as e:
+            logger.error(f"❌ Error en AddSetSimpleTool: {str(e)}")
+            return "❌ Lo siento, no pude registrar la serie en este momento. Por favor, intenta nuevamente."
+
+
 def get_fitness_tools() -> List[BaseTool]:
     """
     Obtener todas las herramientas de fitness
@@ -512,8 +614,9 @@ def get_fitness_tools() -> List[BaseTool]:
     return [
         StartWorkoutTool(),
         EndWorkoutTool(),
-        EndActiveWorkoutTool(),  # Nueva herramienta
+        EndActiveWorkoutTool(),
         AddSetTool(),
+        AddSetSimpleTool(),  # Nueva herramienta simplificada
         GetActiveWorkoutTool(),
         GetExercisesTool()
     ]
