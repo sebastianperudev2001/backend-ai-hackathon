@@ -87,6 +87,18 @@ class SupabaseClient:
                 logger.warning(f"⚠️ Error estableciendo contexto de usuario: {error_msg}")
             
             return False
+    
+    def table(self, table_name: str):
+        """Proxy method para acceder a las tablas de Supabase"""
+        if not self._client:
+            raise Exception("Cliente de Supabase no inicializado")
+        return self._client.table(table_name)
+    
+    def rpc(self, function_name: str, params: dict = None):
+        """Proxy method para llamar funciones RPC de Supabase"""
+        if not self._client:
+            raise Exception("Cliente de Supabase no inicializado")
+        return self._client.rpc(function_name, params or {})
 
 
 def get_supabase_client() -> SupabaseClient:
