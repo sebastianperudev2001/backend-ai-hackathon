@@ -48,7 +48,6 @@ class FitnessRepository:
                 return None
             
             result = self.supabase_client.client.table("users").select("*").eq("phone_number", phone_number).single().execute()
-            print('result', result)
             
             if result.data:
                 # Sanitizar datos del usuario para manejar campos None

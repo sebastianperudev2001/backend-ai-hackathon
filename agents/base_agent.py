@@ -63,7 +63,7 @@ class BaseAgent:
         """
         try:
             if self.llm is None:
-                return f"🤖 {self.name} (Modo Demo): Recibí tu mensaje '{input_text}'. El modelo de IA no está disponible, pero las herramientas de fitness están listas para usar."
+                return f"Hola! Soy tu asistente de {self.name.lower()}. He recibido tu mensaje: '{input_text}'. En este momento estoy en modo limitado, pero puedo ayudarte con información básica."
             
             messages = [
                 SystemMessage(content=self.system_prompt),
@@ -88,7 +88,7 @@ class BaseAgent:
             
         except Exception as e:
             logger.error(f"❌ Error en agente {self.name}: {str(e)}")
-            return f"Lo siento, ocurrió un error al procesar tu solicitud: {str(e)}"
+            return "Lo siento, ocurrió un error al procesar tu solicitud. Por favor, intenta nuevamente o reformula tu pregunta."
     
     def _format_context(self, context: Dict[str, Any]) -> str:
         """

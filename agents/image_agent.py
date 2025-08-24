@@ -105,7 +105,7 @@ class ImageAnalysisAgent(BaseAgent):
             
         except Exception as e:
             logger.error(f"❌ Error analizando imagen: {str(e)}")
-            return f"No pude analizar la imagen correctamente. Error: {str(e)}"
+            return "Lo siento, no pude analizar la imagen en este momento. Por favor, intenta enviar la imagen nuevamente o verifica que sea una imagen válida."
     
     async def analyze_food_image(self, image_data: bytes) -> Dict[str, Any]:
         """

@@ -150,7 +150,6 @@ class CoordinatorAgent:
             result = chain.invoke({"input": last_message.content})
             # Extraer la decisión
             next_agent = result.content.strip()
-            print("next_agent",next_agent)
             # Validar la respuesta
             valid_agents = ["fitness_agent", "nutrition_agent", "FINISH"]
             if next_agent not in valid_agents:

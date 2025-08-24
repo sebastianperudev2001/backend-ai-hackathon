@@ -92,7 +92,7 @@ class StartWorkoutTool(BaseTool):
             # Obtener o crear usuario
             user = await self.fitness_repo.get_or_create_user(phone_number)
             if not user:
-                return f"❌ Error: No se pudo obtener información del usuario {phone_number}"
+                return "❌ Lo siento, no pude acceder a tu información de usuario en este momento. Por favor, intenta nuevamente."
             
             request = StartWorkoutRequest(
                 user_id=user.id,
@@ -132,11 +132,11 @@ Por favor, intenta nuevamente en unos momentos.
 ¿Te gustaría intentar iniciar la rutina nuevamente?
                     """.strip()
                 else:
-                    return f"❌ Error al iniciar rutina: {response.message}"
+                    return "❌ Lo siento, no pude iniciar tu rutina en este momento. Por favor, verifica que no tengas una rutina activa y intenta nuevamente."
                 
         except Exception as e:
             logger.error(f"❌ Error en StartWorkoutTool: {str(e)}")
-            return f"❌ Error interno al iniciar rutina: {str(e)}"
+            return "❌ Lo siento, no pude iniciar la rutina en este momento. Por favor, intenta nuevamente."
 
 
 class EndWorkoutTool(BaseTool):
@@ -195,11 +195,11 @@ class EndWorkoutTool(BaseTool):
                 else:
                     return f"✅ Rutina finalizada: {response.message}"
             else:
-                return f"❌ Error al finalizar rutina: {response.error or response.message}"
+                return "❌ Lo siento, no pude finalizar tu rutina en este momento. Por favor, intenta nuevamente."
                 
         except Exception as e:
             logger.error(f"❌ Error en EndWorkoutTool: {str(e)}")
-            return f"❌ Error interno al finalizar rutina: {str(e)}"
+            return "❌ Lo siento, no pude finalizar la rutina en este momento. Por favor, intenta nuevamente."
 
 
 class AddSetTool(BaseTool):
@@ -267,11 +267,11 @@ class AddSetTool(BaseTool):
             if response.success:
                 return f"✅ {response.message}"
             else:
-                return f"❌ Error al registrar serie: {response.error or response.message}"
+                return "❌ Lo siento, no pude registrar tu serie en este momento. Por favor, verifica que tengas una rutina activa e intenta nuevamente."
                 
         except Exception as e:
             logger.error(f"❌ Error en AddSetTool: {str(e)}")
-            return f"❌ Error interno al registrar serie: {str(e)}"
+            return "❌ Lo siento, no pude registrar la serie en este momento. Por favor, intenta nuevamente."
 
 
 class GetActiveWorkoutTool(BaseTool):
@@ -319,7 +319,7 @@ class GetActiveWorkoutTool(BaseTool):
                 
         except Exception as e:
             logger.error(f"❌ Error en GetActiveWorkoutTool: {str(e)}")
-            return f"❌ Error al buscar rutina activa: {str(e)}"
+            return "❌ Lo siento, no pude verificar tu rutina activa en este momento. Por favor, intenta nuevamente."
 
 
 class GetExercisesTool(BaseTool):
@@ -406,7 +406,7 @@ class GetExercisesTool(BaseTool):
                 
         except Exception as e:
             logger.error(f"❌ Error en GetExercisesTool: {str(e)}")
-            return f"❌ Error al obtener ejercicios: {str(e)}"
+            return "❌ Lo siento, no pude obtener la lista de ejercicios en este momento. Por favor, intenta nuevamente."
 
 
 # ==================== LISTA DE TOOLS ====================
