@@ -296,6 +296,11 @@ class NutritionAgent(BaseAgent):
             "buscar alimento", "buscar comida", "buscar ingrediente",
             "registrar comida", "anotar comida", "logear", "consumí",
             
+            # Creación y cambio de dietas
+            "crear dieta", "nueva dieta", "cambiar dieta", "cambiar plan",
+            "quiero una dieta", "quiero crear", "necesito una dieta", "hacer una dieta",
+            "diseñar dieta", "plan personalizado", "activar dieta", "crear una dieta",
+            
             # Registro de comidas (frases más naturales)
             "acabo de comer", "comí", "desayuné", "almorcé", "cené",
             "me comí", "tomé", "bebí", "en mi desayuno", "en mi almuerzo", 
@@ -307,7 +312,6 @@ class NutritionAgent(BaseAgent):
         general_keywords = [
             "cómo hacer", "cómo preparar", "receta", "consejos", "beneficios",
             "qué es", "para qué sirve", "cuánto debería", "recomendaciones",
-            "plan para", "dieta para", "rutina para", "crea una", "diseña",
             "suplementos", "vitaminas", "nutrientes", "ayuda con"
         ]
         
@@ -369,6 +373,14 @@ class NutritionAgent(BaseAgent):
         ]):
             result = await self.nutrition_tools.analyze_nutrition_status(user_id)
             return self._format_nutrition_analysis(result)
+        
+        elif any(phrase in message_lower for phrase in [
+            'crear dieta', 'nueva dieta', 'cambiar dieta', 'cambiar plan',
+            'quiero una dieta', 'quiero crear', 'necesito una dieta', 'hacer una dieta',
+            'diseñar dieta', 'plan personalizado', 'activar dieta', 'crear una dieta'
+        ]):
+            logger.info(f"🎯 Detectado request de creación de dieta para user_id: {user_id}")
+            return await self._handle_diet_creation_request(message, user_id)
         
         elif any(phrase in message_lower for phrase in ['buscar']):
             query = self._extract_search_query(message)
@@ -616,3 +628,93 @@ class NutritionAgent(BaseAgent):
         """Procesar consulta general sin herramientas específicas"""
         # Delegar al agente base para respuesta conversacional
         return await self.process(message, context)
+    
+    async def _handle_diet_creation_request(self, message: str, user_id: str) -> str:
+        """
+        Manejar solicitudes de creación de dietas de forma inteligente
+        
+        Args:
+            message: Mensaje del usuario
+            user_id: ID del usuario
+            
+        Returns:
+            Respuesta con el plan creado o solicitud de información
+        """
+        message_lower = message.lower()
+        
+        # Por simplicidad, crear un plan básico por defecto
+        # En una implementación más avanzada, esto podría extraer parámetros del mensaje
+        # o hacer preguntas al usuario para personalizar
+        
+        # Detectar tipo de objetivo básico del mensaje
+        plan_type = "perdida_peso"  # Default
+        target_calories = 2000  # Default
+        plan_name = "Mi Plan Personalizado"
+        
+        if any(word in message_lower for word in ["subir peso", "ganar peso", "masa muscular", "volumen"]):
+            plan_type = "ganancia_peso"
+            target_calories = 2500
+            plan_name = "Plan de Ganancia de Peso"
+        elif any(word in message_lower for word in ["bajar peso", "perder peso", "adelgazar", "deficit"]):
+            plan_type = "perdida_peso"
+            target_calories = 1800
+            plan_name = "Plan de Pérdida de Peso"
+        elif any(word in message_lower for word in ["mantener", "mantenimiento", "equilibrio"]):
+            plan_type = "mantenimiento"
+            target_calories = 2000
+            plan_name = "Plan de Mantenimiento"
+        
+        # Calcular macros básicos (aproximación estándar)
+        protein_percent = 0.25  # 25% proteína
+        carbs_percent = 0.45    # 45% carbohidratos
+        fat_percent = 0.30      # 30% grasas
+        
+        target_protein_g = (target_calories * protein_percent) / 4  # 4 kcal/g
+        target_carbs_g = (target_calories * carbs_percent) / 4      # 4 kcal/g
+        target_fat_g = (target_calories * fat_percent) / 9          # 9 kcal/g
+        
+        try:
+            # Crear el plan usando las herramientas
+            result = await self.nutrition_tools.create_diet_plan(
+                user_id=user_id,
+                plan_name=plan_name,
+                plan_type=plan_type,
+                target_calories=target_calories,
+                target_protein_g=target_protein_g,
+                target_carbs_g=target_carbs_g,
+                target_fat_g=target_fat_g,
+                description=f"Plan personalizado basado en tu solicitud"
+            )
+            
+            if result["success"]:
+                return self._format_diet_creation_response(result)
+            else:
+                return f"❌ {result.get('message', 'No se pudo crear el plan de dieta')}"
+                
+        except Exception as e:
+            logger.error(f"Error creando dieta: {str(e)}")
+            return "Lo siento, hubo un error al crear tu plan de dieta. ¿Podrías intentar de nuevo?"
+    
+    def _format_diet_creation_response(self, result: Dict[str, Any]) -> str:
+        """Formatear respuesta de creación de dieta"""
+        diet_plan = result["diet_plan"]
+        
+        response = f"🎉 **¡Plan de dieta creado exitosamente!**\n\n"
+        response += f"📋 **{diet_plan['name']}**\n"
+        response += f"🎯 **Objetivo:** {diet_plan['plan_type'].replace('_', ' ').title()}\n"
+        response += f"📅 **Fecha inicio:** {diet_plan['start_date']}\n\n"
+        
+        response += f"📊 **Objetivos nutricionales diarios:**\n"
+        response += f"🔥 {diet_plan['target_calories']} kcal totales\n"
+        response += f"🥩 {diet_plan['target_protein_g']:.0f}g proteína ({(diet_plan['target_protein_g']*4/diet_plan['target_calories']*100):.0f}%)\n"
+        response += f"🍞 {diet_plan['target_carbs_g']:.0f}g carbohidratos ({(diet_plan['target_carbs_g']*4/diet_plan['target_calories']*100):.0f}%)\n"
+        response += f"🥑 {diet_plan['target_fat_g']:.0f}g grasas ({(diet_plan['target_fat_g']*9/diet_plan['target_calories']*100):.0f}%)\n\n"
+        
+        response += f"✅ **Tu plan está ahora activo y reemplaza cualquier plan anterior.**\n\n"
+        response += f"💡 **Próximos pasos:**\n"
+        response += f"• Pregunta '¿Qué comidas tengo hoy?' para ver tu plan diario\n"
+        response += f"• Registra tus comidas con 'acabo de comer...'\n"
+        response += f"• Pregunta '¿Cómo voy con mi dieta?' para seguimiento\n\n"
+        response += f"🌟 **¡Luna te ayudará a alcanzar tus objetivos!** 🌙✨"
+        
+        return response

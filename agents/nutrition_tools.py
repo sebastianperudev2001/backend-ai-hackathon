@@ -14,7 +14,7 @@ from domain.models import (
     CreateDietPlanRequest, LogMealRequest, GetTodayMealsRequest,
     GetNextMealRequest, AdjustDietRequest,
     TodayMealsResponse, NextMealResponse, DietAdjustmentResponse,
-    NutritionAnalysisResponse, DietPlanResponse
+    NutritionAnalysisResponse, DietPlanResponse, DietPlan
 )
 
 logger = logging.getLogger(__name__)
@@ -571,5 +571,147 @@ class NutritionTools:
             return {
                 "success": False,
                 "error": f"Error generando sugerencias: {str(e)}",
-                "message": "No se pudieron generar sugerencias de ajuste"
+                                "message": "No se pudieron generar sugerencias de ajuste"
             }
+    
+    async def create_diet_plan(
+        self,
+        user_id: str,
+        plan_name: str,
+        plan_type: str,
+        target_calories: int,
+        target_protein_g: float,
+        target_carbs_g: float,
+        target_fat_g: float,
+        description: Optional[str] = None,
+        dietary_restrictions: Optional[List[str]] = None,
+        food_allergies: Optional[List[str]] = None,
+        disliked_foods: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Crear un nuevo plan de dieta para el usuario
+        
+        Args:
+            user_id: ID del usuario
+            plan_name: Nombre del plan de dieta
+            plan_type: Tipo de plan (pérdida de peso, ganancia muscular, etc.)
+            target_calories: Calorías objetivo diarias
+            target_protein_g: Proteínas objetivo en gramos
+            target_carbs_g: Carbohidratos objetivo en gramos  
+            target_fat_g: Grasas objetivo en gramos
+            description: Descripción del plan (opcional)
+            dietary_restrictions: Restricciones dietéticas (opcional)
+            food_allergies: Alergias alimentarias (opcional)
+            disliked_foods: Alimentos que no le gustan (opcional)
+        
+        Returns:
+            Dict con resultado de la creación del plan
+        """
+        try:
+            # Convertir string del tipo de plan a enum
+            try:
+                diet_plan_type = DietPlanType(plan_type.lower().replace(" ", "_"))
+            except ValueError:
+                # Si no es un tipo válido, usar uno por defecto
+                diet_plan_type = DietPlanType.perdida_peso
+                logger.warning(f"Tipo de plan inválido '{plan_type}', usando pérdida_peso por defecto")
+            
+            # Crear request
+            plan_request = CreateDietPlanRequest(
+                user_id=user_id,
+                name=plan_name,
+                description=description,
+                plan_type=diet_plan_type,
+                target_calories=target_calories,
+                target_protein_g=target_protein_g,
+                target_carbs_g=target_carbs_g,
+                target_fat_g=target_fat_g,
+                dietary_restrictions=dietary_restrictions or [],
+                food_allergies=food_allergies or [],
+                disliked_foods=disliked_foods or []
+            )
+            
+            # Crear plan en la base de datos
+            diet_plan = await self.diet_repo.create_diet_plan(plan_request)
+            
+            if diet_plan:
+                return {
+                    "success": True,
+                    "diet_plan": {
+                        "id": diet_plan.id,
+                        "name": diet_plan.name,
+                        "description": diet_plan.description,
+                        "plan_type": diet_plan.plan_type.value,
+                        "target_calories": diet_plan.target_calories,
+                        "target_protein_g": float(diet_plan.target_protein_g),
+                        "target_carbs_g": float(diet_plan.target_carbs_g),
+                        "target_fat_g": float(diet_plan.target_fat_g),
+                        "is_active": diet_plan.is_active,
+                        "start_date": diet_plan.start_date.strftime("%Y-%m-%d") if diet_plan.start_date else None,
+                        "dietary_restrictions": diet_plan.dietary_restrictions,
+                        "food_allergies": diet_plan.food_allergies
+                    },
+                    "message": f"¡Perfecto! Tu nuevo plan de dieta '{plan_name}' ha sido creado y activado. Objetivo: {target_calories} kcal diarias."
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "No se pudo crear el plan de dieta",
+                    "message": "Hubo un error al crear tu plan de dieta. Por favor, intenta nuevamente."
+                }
+            
+        except Exception as e:
+            logger.error(f"Error creando plan de dieta: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Error creando plan: {str(e)}",
+                "message": "No se pudo crear el plan de dieta debido a un error técnico."
+            }
+    
+    async def get_active_diet_plan(self, user_id: str) -> Dict[str, Any]:
+        """
+        Obtener el plan de dieta activo del usuario
+        
+        Args:
+            user_id: ID del usuario
+        
+        Returns:
+            Dict con información del plan activo
+        """
+        try:
+            diet_plan = await self.diet_repo.get_active_diet_plan(user_id)
+            
+            if diet_plan:
+                return {
+                    "success": True,
+                    "diet_plan": {
+                        "id": diet_plan.id,
+                        "name": diet_plan.name,
+                        "description": diet_plan.description,
+                        "plan_type": diet_plan.plan_type.value,
+                        "target_calories": diet_plan.target_calories,
+                        "target_protein_g": float(diet_plan.target_protein_g),
+                        "target_carbs_g": float(diet_plan.target_carbs_g),
+                        "target_fat_g": float(diet_plan.target_fat_g),
+                        "is_active": diet_plan.is_active,
+                        "start_date": diet_plan.start_date.strftime("%Y-%m-%d") if diet_plan.start_date else None,
+                        "dietary_restrictions": diet_plan.dietary_restrictions,
+                        "food_allergies": diet_plan.food_allergies
+                    },
+                    "message": f"Tu plan activo es '{diet_plan.name}' con objetivo de {diet_plan.target_calories} kcal diarias."
+                }
+            else:
+                return {
+                    "success": False,
+                    "diet_plan": None,
+                    "message": "No tienes un plan de dieta activo. ¿Te gustaría que te ayude a crear uno?"
+                }
+            
+        except Exception as e:
+            logger.error(f"Error obteniendo plan activo: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Error obteniendo plan: {str(e)}",
+                "message": "No se pudo obtener información del plan de dieta."
+            }
+    
