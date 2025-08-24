@@ -184,8 +184,11 @@ class FitnessRepository:
                     error="Supabase no está conectado"
                 )
             
-            # Establecer contexto de usuario
-            self.supabase_client.set_user_context(request.user_id)
+            # Establecer contexto de usuario para RLS
+            context_set = self.supabase_client.set_user_context(request.user_id)
+            if not context_set:
+                logger.warning(f"⚠️ No se pudo establecer contexto de usuario para {request.user_id}")
+                logger.warning("   Las políticas RLS pueden fallar. Verifica que la función set_config exista.")
             
             # Crear nuevo workout
             workout_data = {
@@ -367,8 +370,11 @@ class FitnessRepository:
             if not user:
                 return None
             
-            # Establecer contexto de usuario
-            self.supabase_client.set_user_context(user.id)
+            # Establecer contexto de usuario para RLS
+            context_set = self.supabase_client.set_user_context(user.id)
+            if not context_set:
+                logger.warning(f"⚠️ No se pudo establecer contexto de usuario para {user.id}")
+                logger.warning("   Las políticas RLS pueden fallar. Verifica que la función set_config exista.")
             
             result = self.supabase_client.client.table("workouts").select("*").eq("user_id", user.id).is_("ended_at", "null").order("started_at", desc=True).limit(1).execute()
             

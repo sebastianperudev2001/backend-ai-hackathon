@@ -159,16 +159,65 @@ ALTER TABLE exercises ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de seguridad básicas
 -- Los usuarios pueden ver y modificar solo su propio perfil
-CREATE POLICY "Users can manage their own profile" ON users
-    FOR ALL USING (id::text = current_setting('app.current_user_id', true));
+CREATE POLICY "Users can view their own profile" ON users
+    FOR SELECT USING (id::text = current_setting('app.current_user_id', true));
+
+CREATE POLICY "Users can create profile" ON users
+    FOR INSERT WITH CHECK (id::text = current_setting('app.current_user_id', true));
+
+CREATE POLICY "Users can update their own profile" ON users
+    FOR UPDATE USING (id::text = current_setting('app.current_user_id', true))
+    WITH CHECK (id::text = current_setting('app.current_user_id', true));
+
+CREATE POLICY "Users can delete their own profile" ON users
+    FOR DELETE USING (id::text = current_setting('app.current_user_id', true));
 
 -- Los usuarios pueden ver y modificar solo sus propios workouts
-CREATE POLICY "Users can manage their own workouts" ON workouts
-    FOR ALL USING (user_id::text = current_setting('app.current_user_id', true));
+CREATE POLICY "Users can view their own workouts" ON workouts
+    FOR SELECT USING (user_id::text = current_setting('app.current_user_id', true));
+
+CREATE POLICY "Users can create workouts" ON workouts
+    FOR INSERT WITH CHECK (user_id::text = current_setting('app.current_user_id', true));
+
+CREATE POLICY "Users can update their own workouts" ON workouts
+    FOR UPDATE USING (user_id::text = current_setting('app.current_user_id', true))
+    WITH CHECK (user_id::text = current_setting('app.current_user_id', true));
+
+CREATE POLICY "Users can delete their own workouts" ON workouts
+    FOR DELETE USING (user_id::text = current_setting('app.current_user_id', true));
 
 -- Los workout_sets están vinculados a workouts, así que heredan la seguridad
-CREATE POLICY "Users can manage sets from their workouts" ON workout_sets
-    FOR ALL USING (
+CREATE POLICY "Users can view sets from their workouts" ON workout_sets
+    FOR SELECT USING (
+        workout_id IN (
+            SELECT id FROM workouts 
+            WHERE user_id::text = current_setting('app.current_user_id', true)
+        )
+    );
+
+CREATE POLICY "Users can create sets in their workouts" ON workout_sets
+    FOR INSERT WITH CHECK (
+        workout_id IN (
+            SELECT id FROM workouts 
+            WHERE user_id::text = current_setting('app.current_user_id', true)
+        )
+    );
+
+CREATE POLICY "Users can update sets from their workouts" ON workout_sets
+    FOR UPDATE USING (
+        workout_id IN (
+            SELECT id FROM workouts 
+            WHERE user_id::text = current_setting('app.current_user_id', true)
+        )
+    ) WITH CHECK (
+        workout_id IN (
+            SELECT id FROM workouts 
+            WHERE user_id::text = current_setting('app.current_user_id', true)
+        )
+    );
+
+CREATE POLICY "Users can delete sets from their workouts" ON workout_sets
+    FOR DELETE USING (
         workout_id IN (
             SELECT id FROM workouts 
             WHERE user_id::text = current_setting('app.current_user_id', true)

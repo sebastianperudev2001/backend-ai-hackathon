@@ -70,12 +70,63 @@ Este script:
 - Muestra el SQL necesario
 - Prueba el contexto de usuario
 
+## 🚨 ACTUALIZACIÓN: Fix Completo para RLS
+
+**IMPORTANTE**: Además de la función `set_config`, también necesitas actualizar las políticas RLS para que funcionen correctamente con INSERT operations.
+
+### SQL Completo para Aplicar:
+
+```sql
+-- 1. ELIMINAR POLÍTICAS EXISTENTES
+DROP POLICY IF EXISTS "Users can manage their own profile" ON users;
+DROP POLICY IF EXISTS "Users can manage their own workouts" ON workouts;
+DROP POLICY IF EXISTS "Users can manage sets from their workouts" ON workout_sets;
+
+-- 2. CREAR FUNCIÓN SET_CONFIG
+CREATE OR REPLACE FUNCTION set_config(setting_name text, new_value text, is_local boolean DEFAULT false)
+RETURNS text AS $$
+BEGIN
+    PERFORM set_config(setting_name, new_value, is_local);
+    RETURN new_value;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 3. POLÍTICAS SEPARADAS POR OPERACIÓN
+-- Users
+CREATE POLICY "Users can view their own profile" ON users FOR SELECT USING (id::text = current_setting('app.current_user_id', true));
+CREATE POLICY "Users can create profile" ON users FOR INSERT WITH CHECK (id::text = current_setting('app.current_user_id', true));
+CREATE POLICY "Users can update their own profile" ON users FOR UPDATE USING (id::text = current_setting('app.current_user_id', true)) WITH CHECK (id::text = current_setting('app.current_user_id', true));
+CREATE POLICY "Users can delete their own profile" ON users FOR DELETE USING (id::text = current_setting('app.current_user_id', true));
+
+-- Workouts
+CREATE POLICY "Users can view their own workouts" ON workouts FOR SELECT USING (user_id::text = current_setting('app.current_user_id', true));
+CREATE POLICY "Users can create workouts" ON workouts FOR INSERT WITH CHECK (user_id::text = current_setting('app.current_user_id', true));
+CREATE POLICY "Users can update their own workouts" ON workouts FOR UPDATE USING (user_id::text = current_setting('app.current_user_id', true)) WITH CHECK (user_id::text = current_setting('app.current_user_id', true));
+CREATE POLICY "Users can delete their own workouts" ON workouts FOR DELETE USING (user_id::text = current_setting('app.current_user_id', true));
+
+-- Workout Sets (políticas similares pero más largas - ver esquema completo)
+```
+
 ## 🧪 Verificar que Funciona
 
-Después de crear la función, el error debería desaparecer y verás logs como:
+Después de aplicar el fix completo, deberías ver:
+
+1. **Contexto establecido**:
 
 ```
 🔐 Contexto de usuario establecido: 123e4567-e89b-12d3-a456-426614174000
+```
+
+2. **Sin errores de RLS**:
+
+```
+✅ Rutina iniciada: workout-123 para usuario user-456
+```
+
+3. **No más errores como**:
+
+```
+❌ new row violates row-level security policy for table "workouts"
 ```
 
 ## ⚠️ Consideraciones Importantes
