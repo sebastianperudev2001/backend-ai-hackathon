@@ -11,7 +11,7 @@ from langchain.schema import BaseMessage, HumanMessage, SystemMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from .fitness_agent import FitnessAgent
-from .nutrition_agent import NutritionAgent
+from .nutrition_agent_simple import NutritionAgent
 from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
