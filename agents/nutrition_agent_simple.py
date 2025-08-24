@@ -378,62 +378,194 @@ class NutritionAgent(BaseAgent):
             Respuesta con el resultado del registro
         """
         try:
-            # Por ahora, como no tenemos un parser completo de alimentos,
-            # vamos a dar una respuesta que ayude al usuario
+            logger.info(f"🍽️ Iniciando registro de comida para user_id: {user_id}")
             message_lower = message.lower()
             
-            # Detectar tipo de comida
-            meal_type = "desayuno"  # default
-            if any(word in message_lower for word in ["desayuno", "desayuné", "en mi desayuno", "para desayunar"]):
-                meal_type = "desayuno"
-            elif any(word in message_lower for word in ["almuerzo", "almorcé", "en mi almuerzo", "para almorzar"]):
-                meal_type = "almuerzo"
-            elif any(word in message_lower for word in ["cena", "cené", "en mi cena", "para cenar"]):
-                meal_type = "cena"
-            elif any(word in message_lower for word in ["colacion", "snack", "merienda"]):
-                meal_type = "colacion_1"
+            # 1. Detectar tipo de comida
+            meal_type = self._detect_meal_type(message_lower)
+            logger.info(f"📅 Tipo de comida detectado: {meal_type}")
             
-            # Construir respuesta informativa
-            response = f"🍽️ **Registro de Comida - {meal_type.title()}**\n\n"
-            response += f"📝 **Detección:** He identificado que quieres registrar una comida para tu {meal_type}.\n\n"
-            response += f"💡 **Mensaje recibido:** {message[:100]}...\n\n"
+            # 2. Parser inteligente de alimentos y cantidades
+            parsed_foods = self._parse_foods_and_quantities(message)
+            logger.info(f"🔍 Alimentos parseados: {len(parsed_foods)} items")
             
-            # Extraer información básica
-            foods_mentioned = []
-            if "huevo" in message_lower:
-                foods_mentioned.append("huevos")
-            if "pan" in message_lower:
-                foods_mentioned.append("pan")
-            if "leche" in message_lower:
-                foods_mentioned.append("leche")
-            if "fruta" in message_lower:
-                foods_mentioned.append("fruta")
+            if not parsed_foods:
+                return "🤔 No pude identificar alimentos específicos en tu mensaje. ¿Podrías ser más específico? Por ejemplo: 'comí 2 huevos de 60g cada uno'"
             
-            if foods_mentioned:
-                response += f"🍎 **Alimentos detectados:** {', '.join(foods_mentioned)}\n\n"
+            # 3. Mapear a base de datos y calcular macros
+            meal_ingredients = await self._map_foods_to_database(parsed_foods)
+            logger.info(f"🍎 Ingredientes mapeados: {len(meal_ingredients)} válidos")
             
-            response += f"⚙️ **Estado actual del sistema:**\n"
-            response += f"• ✅ Detección de intent: FUNCIONA\n"
-            response += f"• ✅ Routing a herramientas: FUNCIONA\n"
-            response += f"• ❓ Parser de alimentos: PENDIENTE DE IMPLEMENTAR\n"
-            response += f"• ❓ Registro en BD: PENDIENTE DE IMPLEMENTAR\n\n"
+            if not meal_ingredients:
+                return "❌ No encontré esos alimentos en mi base de datos. Intenta con: huevos, avena, plátano, pollo, arroz, etc."
             
-            response += f"🚧 **Para implementar registro completo necesitamos:**\n"
-            response += f"1. Parser inteligente de alimentos y cantidades\n"
-            response += f"2. Mapeo a la base de datos de alimentos\n"
-            response += f"3. Cálculo automático de macronutrientes\n"
-            response += f"4. Inserción en consumed_meals y consumed_meal_ingredients\n\n"
+            # 4. Registrar comida en base de datos
+            meal_name = self._generate_meal_name(parsed_foods)
+            result = await self.nutrition_tools.log_meal(
+                user_id=user_id,
+                meal_type=meal_type,
+                meal_name=meal_name,
+                ingredients=meal_ingredients
+            )
             
-            response += f"💡 **Mientras tanto, puedes:**\n"
-            response += f"• Usar 'buscar huevos' para ver info nutricional\n"
-            response += f"• Preguntar '¿qué comidas tengo hoy?' para ver tu plan\n"
-            response += f"• Solicitar '¿cómo voy con mi dieta?' para análisis actual\n"
-            
-            return response
+            if result["success"]:
+                logger.info(f"✅ Comida registrada exitosamente: {result['consumed_meal']['id']}")
+                return self._format_meal_logged_response(result, meal_type)
+            else:
+                logger.error(f"❌ Error registrando comida: {result.get('error')}")
+                return f"❌ No pude registrar tu comida: {result.get('message', 'Error desconocido')}"
             
         except Exception as e:
-            logger.error(f"Error procesando registro de comida: {str(e)}")
-            return f"❌ Error procesando el registro de comida: {str(e)}"
+            logger.error(f"❌ Error procesando registro de comida: {str(e)}")
+            return "❌ Hubo un error registrando tu comida. Intenta de nuevo."
+    
+    def _detect_meal_type(self, message_lower: str) -> str:
+        """Detectar el tipo de comida del mensaje"""
+        if any(word in message_lower for word in ["desayuno", "desayuné", "en mi desayuno", "para desayunar"]):
+            return "desayuno"
+        elif any(word in message_lower for word in ["almuerzo", "almorcé", "en mi almuerzo", "para almorzar"]):
+            return "almuerzo"
+        elif any(word in message_lower for word in ["cena", "cené", "en mi cena", "para cenar"]):
+            return "cena"
+        elif any(word in message_lower for word in ["colacion", "snack", "merienda"]):
+            return "colacion_1"
+        else:
+            return "desayuno"  # default
+    
+    def _parse_foods_and_quantities(self, message: str) -> List[Dict[str, Any]]:
+        """
+        Parser inteligente de alimentos y cantidades
+        
+        Args:
+            message: Mensaje del usuario
+            
+        Returns:
+            Lista de diccionarios con {name, quantity, unit}
+        """
+        import re
+        
+        message_lower = message.lower()
+        parsed_foods = []
+        
+        # Patrones para detectar alimentos con cantidades
+        patterns = [
+            # "6 huevos grandes (55g)"
+            r"(\d+)\s*(huevos?)\s*(?:grandes?|medianos?|pequeños?)?\s*(?:\((\d+)g?\))?",
+            # "40g de avena"
+            r"(\d+)g?\s*de\s*(\w+)",
+            # "platano de 150g"
+            r"(\w+)\s*de\s*(\d+)g?",
+            # "150g platano"
+            r"(\d+)g?\s*(\w+)",
+        ]
+        
+        # Mapeo de nombres comunes a nombres estándar
+        food_mapping = {
+            "huevo": "huevos", "huevos": "huevos",
+            "avena": "avena", "avena cocida": "avena",
+            "platano": "plátano", "plátano": "plátano", "banana": "plátano",
+            "pan": "pan", "pan integral": "pan integral",
+            "leche": "leche", "yogur": "yogur griego",
+            "pollo": "pechuga de pollo", "pechuga": "pechuga de pollo"
+        }
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, message_lower)
+            for match in matches:
+                if len(match) == 3:  # cantidad, alimento, peso extra
+                    quantity, food, extra_weight = match
+                    if extra_weight:
+                        total_weight = int(quantity) * int(extra_weight)
+                    else:
+                        total_weight = int(quantity) * 50  # peso promedio
+                elif len(match) == 2:
+                    first, second = match
+                    if first.isdigit():
+                        quantity, food = first, second
+                        total_weight = int(quantity)
+                    else:
+                        food, quantity = first, second
+                        total_weight = int(quantity)
+                else:
+                    continue
+                
+                # Normalizar nombre del alimento
+                normalized_food = food_mapping.get(food, food)
+                
+                parsed_foods.append({
+                    "name": normalized_food,
+                    "quantity": total_weight,
+                    "unit": "g"
+                })
+        
+        # Log de lo que se parseó
+        logger.info(f"🔍 Parsed foods: {parsed_foods}")
+        return parsed_foods
+    
+    async def _map_foods_to_database(self, parsed_foods: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Mapear alimentos parseados a la base de datos
+        
+        Args:
+            parsed_foods: Lista de alimentos parseados
+            
+        Returns:
+            Lista de ingredientes válidos para log_meal
+        """
+        meal_ingredients = []
+        
+        for food_item in parsed_foods:
+            food_name = food_item["name"]
+            quantity_grams = food_item["quantity"]
+            
+            # Buscar el alimento en la base de datos
+            search_result = await self.nutrition_tools.search_foods(food_name, limit=1)
+            
+            if search_result["success"] and search_result["foods"]:
+                food_data = search_result["foods"][0]
+                
+                meal_ingredients.append({
+                    "food_id": food_data["id"],
+                    "quantity_grams": quantity_grams,
+                    "notes": f"{quantity_grams}g de {food_data['name_es']}"
+                })
+                
+                logger.info(f"✅ Mapeado: {food_name} -> {food_data['name_es']} ({quantity_grams}g)")
+            else:
+                logger.warning(f"❌ No encontrado en BD: {food_name}")
+        
+        return meal_ingredients
+    
+    def _generate_meal_name(self, parsed_foods: List[Dict[str, Any]]) -> str:
+        """Generar nombre descriptivo para la comida"""
+        if not parsed_foods:
+            return "Comida registrada"
+        
+        food_names = [food["name"] for food in parsed_foods[:3]]  # Max 3 nombres
+        if len(parsed_foods) > 3:
+            return f"{', '.join(food_names)} y más"
+        else:
+            return ', '.join(food_names)
+    
+    def _format_meal_logged_response(self, result: Dict[str, Any], meal_type: str) -> str:
+        """Formatear respuesta para WhatsApp después de registrar comida"""
+        consumed_meal = result["consumed_meal"]
+        
+        response = f"✅ ¡Comida registrada!\n\n"
+        response += f"🍽️ {consumed_meal['meal_name']}\n"
+        response += f"⏰ {meal_type.title()} - {consumed_meal['consumed_at']}\n\n"
+        response += f"📊 Información nutricional:\n"
+        response += f"🔥 {consumed_meal['total_calories']:.0f} calorías\n"
+        response += f"🥩 {consumed_meal['total_protein_g']:.1f}g proteína\n"
+        response += f"🍞 {consumed_meal['total_carbs_g']:.1f}g carbohidratos\n"
+        response += f"🥑 {consumed_meal['total_fat_g']:.1f}g grasas\n"
+        
+        if consumed_meal.get("satisfaction_rating"):
+            response += f"⭐ Satisfacción: {consumed_meal['satisfaction_rating']}/5\n"
+        
+        response += f"\n💡 Escribe '¿cómo voy con mi dieta?' para ver tu progreso del día"
+        
+        return response
     
     async def _process_general_query(self, message: str, user: User, context: Dict[str, Any]) -> str:
         """Procesar consulta general sin herramientas específicas"""
