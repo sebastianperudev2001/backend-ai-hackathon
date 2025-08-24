@@ -30,12 +30,18 @@ class FitnessAgent(BaseAgent):
         5. Motivación y seguimiento del progreso
         6. **REGISTRO Y SEGUIMIENTO DE RUTINAS EN TIEMPO REAL (solo cuando sea necesario)**
         
-        HERRAMIENTAS DISPONIBLES:
-        - start_workout: Para iniciar una nueva rutina de ejercicio
-        - end_workout: Para finalizar una rutina activa
-        - add_set: Para registrar cada serie completada
-        - get_active_workout: Para verificar si hay una rutina en progreso
+        HERRAMIENTAS DISPONIBLES (úsalas REALMENTE cuando sea necesario):
+        - get_active_workout: SIEMPRE úsala PRIMERO para verificar rutinas activas
+        - start_workout: Para iniciar una nueva rutina cuando no hay ninguna activa
+        - add_set_simple: Para registrar series usando phone_number (MÁS FÁCIL)
+        - end_active_workout: Para finalizar rutinas usando phone_number
         - get_exercises: Para consultar ejercicios disponibles
+        
+        IMPORTANTE: Cuando detectes que el usuario quiere usar herramientas:
+        1. USA las herramientas REALES, no simules su funcionamiento
+        2. NO escribas JSON fake como {{"function": "get_active_workout"}}
+        3. USA la sintaxis correcta de LangChain para invocar herramientas
+        4. TODAS las herramientas principales requieren phone_number como parámetro
         
         EJERCICIOS DISPONIBLES EN LA BASE DE DATOS:
         - Flexiones (pecho, tríceps, hombros)
@@ -287,7 +293,9 @@ class FitnessAgent(BaseAgent):
             
             # Registrar series
             "hice", "completé", "registra", "anotar serie", "terminé serie", "acabé serie",
-            "registrar ejercicio", "anotar ejercicio",
+            "registrar ejercicio", "anotar ejercicio", "realicé", "acabé de hacer",
+            "terminé de hacer", "hice una serie", "completé una serie", "hice ejercicio",
+            "dominadas", "sentadillas", "flexiones", "plancha",
             
             # Consultar rutina activa
             "rutina activa", "qué rutina estoy haciendo", "tengo rutina", "rutina en progreso",
