@@ -208,6 +208,7 @@ class CoordinatorAgent:
         workflow.add_node("supervisor", self._supervisor)
         workflow.add_node("fitness_agent", self._fitness_agent_node)
         workflow.add_node("nutrition_agent", self._nutrition_agent_node)
+        workflow.add_node("welcome", self._welcome_node)
         
         # Definir el flujo - supervisor como punto de entrada
         workflow.add_edge(START, "supervisor")
@@ -219,6 +220,7 @@ class CoordinatorAgent:
             {
                 "fitness_agent": "fitness_agent",
                 "nutrition_agent": "nutrition_agent",
+                "welcome": "welcome",
                 "FINISH": END
             }
         )
@@ -226,6 +228,7 @@ class CoordinatorAgent:
         # Los agentes retornan al supervisor
         workflow.add_edge("fitness_agent", END)
         workflow.add_edge("nutrition_agent", END)
+        workflow.add_edge("welcome", END)
         
         # Compilar el grafo
         return workflow.compile()
@@ -254,15 +257,17 @@ class CoordinatorAgent:
         supervisor_prompt = ChatPromptTemplate.from_messages([
             ("system", """Eres un supervisor que enruta consultas a agentes especializados.
             Tienes disponibles estos agentes:
+            - welcome: Para saludos, primeras interacciones y mensajes de bienvenida  
             - fitness_agent: Experto en ejercicio, rutinas, técnicas de entrenamiento y fitness
             - nutrition_agent: Experto en nutrición, dietas, calorías y alimentación saludable
 
             Analiza la consulta del usuario y decide:
-            1. Si debe ir al fitness_agent
-            2. Si debe ir al nutrition_agent  
-            3. Si ya se ha respondido completamente, responde FINISH
+            1. Si es un saludo o mensaje de bienvenida (hola, buenos días, ayuda, qué puedes hacer, etc.) → welcome
+            2. Si es sobre ejercicio, fitness o entrenamiento → fitness_agent
+            3. Si es sobre nutrición, dietas o comidas → nutrition_agent  
+            4. Si ya se ha respondido completamente → FINISH
 
-            Responde SOLO con uno de estos valores: fitness_agent, nutrition_agent, o FINISH
+            Responde SOLO con uno de estos valores: welcome, fitness_agent, nutrition_agent, o FINISH
             """),
             ("human", "{input}")
         ])
@@ -279,7 +284,7 @@ class CoordinatorAgent:
                 next_agent = self._simple_agent_detection(last_message.content)
             
             # Validar la respuesta
-            valid_agents = ["fitness_agent", "nutrition_agent", "FINISH"]
+            valid_agents = ["fitness_agent", "nutrition_agent", "welcome", "FINISH"]
             if next_agent not in valid_agents:
                 # Si hay palabras clave, intentar inferir
                 next_agent = self._simple_agent_detection(last_message.content)
@@ -304,9 +309,22 @@ class CoordinatorAgent:
             message_content: Contenido del mensaje del usuario
             
         Returns:
-            Nombre del agente a usar
+            Nombre del agente a usar o "welcome" para mensajes de bienvenida
         """
         content_lower = message_content.lower()
+        
+        # Detectar mensajes de bienvenida/primera interacción
+        welcome_keywords = [
+            'hola', 'buenas', 'buenos días', 'buenas tardes', 'buenas noches',
+            'inicio', 'empezar', 'comenzar', 'ayuda', 'start', 'help', 'hello',
+            'qué puedes hacer', 'que puedes hacer', 'quién eres', 'quien eres',
+            'presentate', 'preséntate', 'información', 'info', 'opciones',
+            'cómo funciona', 'como funciona', 'qué es faitracker', 'que es faitracker'
+        ]
+        
+        # Verificar si es mensaje de saludo/bienvenida
+        if any(keyword in content_lower for keyword in welcome_keywords) and len(message_content) < 50:
+            return "welcome"
         
         # Palabras clave para nutrición
         nutrition_keywords = [
@@ -480,6 +498,57 @@ class CoordinatorAgent:
             )
             return state
     
+    async def _welcome_node(self, state: GraphState) -> GraphState:
+        """
+        Nodo de bienvenida para nuevos usuarios o mensajes de saludo
+        
+        Args:
+            state: Estado actual del grafo
+            
+        Returns:
+            Estado actualizado con mensaje de bienvenida
+        """
+        try:
+            logger.info("👋 Procesando mensaje de bienvenida")
+            
+            welcome_message = """¡Hola! Bienvenido a FaiTracker 🌟
+
+🎯 **Tu plataforma de fitness y nutrición inteligente**
+
+Tienes acceso a nuestros expertos:
+
+💪 **Sebastián** - Tu entrenador personal de fitness
+• Rutinas personalizadas y seguimiento de entrenamientos
+• Registro en tiempo real de ejercicios y progreso
+• Técnicas correctas y prevención de lesiones
+• Más de 98 ejercicios en nuestra base de datos
+
+🌙 **Luna** - Tu coach de nutrición
+• Registro inteligente de comidas con análisis de macros
+• Planes de dieta personalizados y seguimiento nutricional  
+• Recomendaciones basadas en tus objetivos
+• Base de datos nutricional completa
+
+✨ **¿Qué quieres hacer hoy?**
+
+Puedes preguntarme sobre:
+🏋️ Fitness: "quiero entrenar", "rutina de pecho", "registrar mi workout"
+🥗 Nutrición: "qué comidas tengo hoy", "registrar mi desayuno", "análisis nutricional"
+
+¡Estamos aquí para ayudarte a alcanzar tus objetivos! 💪🌟"""
+            
+            # Agregar mensaje de bienvenida a los mensajes
+            state["messages"].append(AIMessage(content=welcome_message))
+            
+            logger.info("✅ Mensaje de bienvenida enviado")
+            return state
+            
+        except Exception as e:
+            logger.error(f"❌ Error en nodo de bienvenida: {str(e)}")
+            state["messages"].append(
+                AIMessage(content="¡Hola! Bienvenido a FaiTracker. ¿En qué puedo ayudarte hoy?")
+            )
+            return state
 
     
     async def process_message(
